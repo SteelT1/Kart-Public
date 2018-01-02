@@ -32,46 +32,52 @@
 //
 typedef enum
 {
-	PT_NOTHING,       // To send a nop through the network. ^_~
-	PT_SERVERCFG,     // Server config used in start game
-	                  // (must stay 1 for backwards compatibility).
-	                  // This is a positive response to a CLIENTJOIN request.
-	PT_CLIENTCMD,     // Ticcmd of the client.
-	PT_CLIENTMIS,     // Same as above with but saying resend from.
-	PT_CLIENT2CMD,    // 2 cmds in the packet for splitscreen.
-	PT_CLIENT2MIS,    // Same as above with but saying resend from
-	PT_NODEKEEPALIVE, // Same but without ticcmd and consistancy
+	PT_NOTHING,        // To send a nop through the network. ^_~
+	PT_SERVERCFG,      // Server config used in start game
+	                   // (must stay 1 for backwards compatibility).
+	                   // This is a positive response to a CLIENTJOIN request.
+	PT_CLIENTCMD,      // Ticcmd of the client.
+	PT_CLIENTMIS,      // Same as above with but saying resend from.
+	PT_CLIENT2CMD,     // 2 cmds in the packet for splitscreen.
+	PT_CLIENT2MIS,     // Same as above with but saying resend from
+	PT_NODEKEEPALIVE,  // Same but without ticcmd and consistancy
 	PT_NODEKEEPALIVEMIS,
-	PT_SERVERTICS,    // All cmds for the tic.
-	PT_SERVERREFUSE,  // Server refuses joiner (reason inside).
+	PT_SERVERTICS,     // All cmds for the tic.
+	PT_SERVERREFUSE,   // Server refuses joiner (reason inside).
 	PT_SERVERSHUTDOWN,
-	PT_CLIENTQUIT,    // Client closes the connection.
+	PT_CLIENTQUIT,     // Client closes the connection.
 
-	PT_ASKINFO,       // Anyone can ask info of the server.
-	PT_SERVERINFO,    // Send game & server info (gamespy).
-	PT_PLAYERINFO,    // Send information for players in game (gamespy).
-	PT_REQUESTFILE,   // Client requests a file transfer
-	PT_ASKINFOVIAMS,  // Packet from the MS requesting info be sent to new client.
-	                  // If this ID changes, update masterserver definition.
-	PT_RESYNCHEND,    // Player is now resynched and is being requested to remake the gametic
-	PT_RESYNCHGET,    // Player got resynch packet
+	PT_ASKINFO,        // Anyone can ask info of the server.
+	PT_SERVERINFO,     // Send game & server info (gamespy).
+	PT_PLAYERINFO,     // Send information for players in game (gamespy).
+	PT_REQUESTFILE,    // Client requests a file transfer
+	PT_ASKINFOVIAMS,   // Packet from the MS requesting info be sent to new client.
+	                   // If this ID changes, update masterserver definition.
+	PT_RESYNCHEND,     // Player is now resynched and is being requested to remake the gametic
+	PT_RESYNCHGET,     // Player got resynch packet
 
 	// Add non-PT_CANFAIL packet types here to avoid breaking MS compatibility.
 
-	PT_CANFAIL,       // This is kind of a priority. Anything bigger than CANFAIL
-	                  // allows HSendPacket(*, true, *, *) to return false.
-	                  // In addition, this packet can't occupy all the available slots.
+#ifdef HAVE_BLUA
+	PT_SENDINGLUAFILE, // Server telling a client Lua needs to open a file
+	PT_ASKLUAFILE,     // Client telling the server they don't have the file
+	PT_HASLUAFILE,     // Client telling the server they have the file
+#endif
+
+	PT_CANFAIL,        // This is kind of a priority. Anything bigger than CANFAIL
+	                   // allows HSendPacket(*, true, *, *) to return false.
+	                   // In addition, this packet can't occupy all the available slots.
 
 	PT_FILEFRAGMENT = PT_CANFAIL, // A part of a file.
 
-	PT_TEXTCMD,       // Extra text commands from the client.
-	PT_TEXTCMD2,      // Splitscreen text commands.
-	PT_CLIENTJOIN,    // Client wants to join; used in start game.
-	PT_NODETIMEOUT,   // Packet sent to self if the connection times out.
-	PT_RESYNCHING,    // Packet sent to resync players.
-	                  // Blocks game advance until synched.
+	PT_TEXTCMD,        // Extra text commands from the client.
+	PT_TEXTCMD2,       // Splitscreen text commands.
+	PT_CLIENTJOIN,     // Client wants to join; used in start game.
+	PT_NODETIMEOUT,    // Packet sent to self if the connection times out.
+	PT_RESYNCHING,     // Packet sent to resync players.
+	                   // Blocks game advance until synched.
 #ifdef NEWPING
-	PT_PING,          // Packet sent to tell clients the other client's latency to server.
+	PT_PING,           // Packet sent to tell clients the other client's latency to server.
 #endif
 	NUMPACKETTYPE
 } packettype_t;
@@ -405,6 +411,9 @@ typedef struct
 		plrconfig playerconfig[MAXPLAYERS]; // (up to) 896 bytes (welp they ARE)
 #ifdef NEWPING
 		UINT32 pingtable[MAXPLAYERS];       //         128 bytes
+#endif
+#ifdef HAVE_BLUA
+		char luafile[128 + 1];
 #endif
 	} u; // This is needed to pack diff packet types data together
 } ATTRPACK doomdata_t;

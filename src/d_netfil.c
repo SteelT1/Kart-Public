@@ -101,6 +101,11 @@ char downloaddir[256] = "DOWNLOAD";
 INT32 lastfilenum = -1;
 #endif
 
+#ifdef HAVE_BLUA
+luafiletransfer_t *luafiletransfers = NULL;
+boolean waitingforluafiletransfer = false;
+#endif
+
 /** Fills a serverinfo packet with information about wad files loaded.
   *
   * \todo Give this function a better name since it is in global scope.
@@ -493,6 +498,151 @@ void CL_LoadServerFiles(void)
 	}
 }
 
+#ifdef HAVE_BLUA
+void AddLuaFileTransfer(const char *filename)
+{
+	luafiletransfer_t **prevnext; // A pointer to the "next" field of the last transfer in the list
+	luafiletransfer_t *filetransfer;
+	static INT32 id;
+
+	//CONS_Printf("AddLuaFileTransfer \"%s\"\n", filename);
+
+	// Find the last transfer in the list and set a pointer to its "next" field
+	prevnext = &luafiletransfers;
+	while (*prevnext)
+		prevnext = &((*prevnext)->next);
+
+	// Allocate file transfer information and append it to the transfer list
+	filetransfer = malloc(sizeof(luafiletransfer_t));
+	if (!filetransfer)
+		I_Error("AddLuaFileTransfer: Out of memory\n");
+	*prevnext = filetransfer;
+    filetransfer->next = NULL;
+
+    // Allocate the file name
+    filetransfer->filename = strdup(filename);
+    if (!filetransfer->filename)
+		I_Error("AddLuaFileTransfer: Out of memory\n");
+
+    // Create and allocate the real file name
+	if (server)
+		filetransfer->realfilename = strdup(va("luafiles/%s", filename));
+	else
+		filetransfer->realfilename = strdup(va("luafiles/shared/$$$%d%d.tmp", rand(), rand()));
+    if (!filetransfer->realfilename)
+		I_Error("AddLuaFileTransfer: Out of memory\n");
+
+    if (!luafiletransfers->realfilename)
+		I_Error("AddLuaFileTransfer: Out of memory\n");
+
+	if (server)
+	{
+		// Set status to "waiting" for everyone
+		memset(filetransfer->nodestatus, 0, MAXNETNODES);
+
+		if (!luafiletransfers->next) // Only if there is no transfer already going on
+			SV_PrepareSendLuaFileToNextNode();
+	}
+
+	// Store the callback so it can be called once everyone has the file
+	filetransfer->id = id;
+	StoreLuaFileCallback(id);
+	id++;
+
+	if (waitingforluafiletransfer)
+	{
+		waitingforluafiletransfer = false;
+		CL_PrepareDownloadLuaFile();
+	}
+}
+
+void SV_PrepareSendLuaFileToNextNode(void)
+{
+	INT32 i;
+
+    // Find a client to send the file to
+	for (i = 1; i < MAXNETNODES; i++)
+		if (nodeingame[i] && luafiletransfers->nodestatus[i] == 0) // Node waiting
+		{
+			// Tell the client we're about to send them the file
+			netbuffer->packettype = PT_SENDINGLUAFILE;
+			strcpy(netbuffer->u.luafile, luafiletransfers->filename);
+			if (!HSendPacket(i, true, 0, strlen(luafiletransfers->filename) + 1))
+				I_Error("Failed to send a PT_SENDINGLUAFILE packet\n"); // !!! Todo: Handle failure a bit better lol
+
+			luafiletransfers->nodestatus[i]++; // Set status to "asked"
+
+			return;
+		}
+
+	// No client found, everyone has the file
+	CONS_Printf("All clients have the file\n");
+	SendNetXCmd(XD_LUAFILE, luafiletransfers->filename, strlen(luafiletransfers->filename) + 1);
+}
+
+void SV_HandleLuaFileSent(UINT8 node)
+{
+	luafiletransfers->nodestatus[node]++; // Set status as "sent"
+    SV_PrepareSendLuaFileToNextNode();
+}
+
+void RemoveLuaFileTransfer(void)
+{
+	luafiletransfer_t *filetransfer = luafiletransfers;
+
+	RemoveLuaFileCallback();
+
+	luafiletransfers = filetransfer->next;
+
+	free(filetransfer->filename);
+	free(filetransfer->realfilename);
+	free(filetransfer);
+}
+
+void RemoveLuaFileTransfers(void)
+{
+	while (luafiletransfers)
+		RemoveLuaFileTransfer();
+}
+
+void SV_AbortLuaFileTransfer(INT32 node)
+{
+	if (luafiletransfers
+	&& (luafiletransfers->nodestatus[node] == 1 // Asked
+	||  luafiletransfers->nodestatus[node] == 2)) // Sending
+	{
+		luafiletransfers->nodestatus[node] = 0; // Set status to "waiting"
+		SV_PrepareSendLuaFileToNextNode();
+	}
+}
+
+void CL_PrepareDownloadLuaFile(void)
+{
+	// If there is no transfer in the list, this normally means the server
+	// called io.open before us, so we have to wait until we call it too
+	if (!luafiletransfers)
+	{
+		waitingforluafiletransfer = true;
+		return;
+	}
+
+	// Tell the server we are ready to receive the file
+	CONS_Printf("Receiving Lua file \"%s\"...\n", luafiletransfers->realfilename);
+	netbuffer->packettype = PT_ASKLUAFILE;
+	HSendPacket(servernode, true, 0, 0);
+
+	fileneedednum = 1;
+	fileneeded[0].status = FS_REQUESTED;
+	fileneeded[0].totalsize = UINT32_MAX;
+	fileneeded[0].file = NULL;
+	memset(fileneeded[0].md5sum, 0, 16);
+	strcpy(fileneeded[0].filename, luafiletransfers->realfilename);
+
+	// Make sure all directories in the file path exist
+	MakePathDirs(fileneeded[0].filename);
+}
+#endif
+
 // Number of files to send
 // Little optimization to quickly test if there is a file in the queue
 static INT32 filestosend = 0;
@@ -503,6 +653,7 @@ static INT32 filestosend = 0;
   * \param filename The file to send
   * \param fileid ???
   * \sa SV_SendRam
+  * \sa SV_SendLuaFile
   *
   */
 static boolean SV_SendFile(INT32 node, const char *filename, UINT8 fileid)
@@ -593,6 +744,7 @@ static boolean SV_SendFile(INT32 node, const char *filename, UINT8 fileid)
   * \param freemethod How to free the block after it has been sent
   * \param fileid ???
   * \sa SV_SendFile
+  * \sa SV_SendLuaFile
   *
   */
 void SV_SendRam(INT32 node, void *data, size_t size, freemethod_t freemethod, UINT8 fileid)
@@ -623,6 +775,54 @@ void SV_SendRam(INT32 node, void *data, size_t size, freemethod_t freemethod, UI
 
 	filestosend++;
 }
+
+#ifdef HAVE_BLUA
+/** Adds a file requested by Lua to the file list for a node
+  *
+  * \param node The node to send the file to
+  * \param filename The file to send
+  * \sa SV_SendFile
+  * \sa SV_SendRam
+  *
+  */
+boolean SV_SendLuaFile(INT32 node, const char *filename)
+{
+	filetx_t **q; // A pointer to the "next" field of the last file in the list
+	filetx_t *p; // The new file request
+	//INT32 i;
+	//char wadfilename[MAX_WADPATH];
+
+	luafiletransfers->nodestatus[node]++; // Set status to "sending"
+
+	// Find the last file in the list and set a pointer to its "next" field
+	q = &transfer[node].txlist;
+	while (*q)
+		q = &((*q)->next);
+
+	// Allocate a file request and append it to the file list
+	p = *q = (filetx_t *)malloc(sizeof (filetx_t));
+	if (!p)
+		I_Error("SV_SendLuaFile: No more memory\n");
+
+	// Initialise with zeros
+	memset(p, 0, sizeof (filetx_t));
+
+	// Allocate the file name
+	p->id.filename = (char *)malloc(MAX_WADPATH); // !!!
+	if (!p->id.filename)
+		I_Error("SV_SendLuaFile: No more memory\n");
+
+	// Set the file name and get rid of the path
+	strlcpy(p->id.filename, filename, MAX_WADPATH); // !!!
+	//nameonly(p->id.filename);
+
+	DEBFILE(va("Sending Lua file %s to %d\n", filename, node));
+	p->ram = SF_FILE; // It's a file, we need to close it and free its name once we're done sending it
+	p->next = NULL; // End of list
+	filestosend++;
+	return true;
+}
+#endif
 
 /** Stops sending a file for a node, and removes the file request from the list,
   * either because the file has been fully sent or because the node was disconnected
@@ -847,6 +1047,15 @@ void Got_Filetxpak(void)
 			file->status = FS_FOUND;
 			CONS_Printf(M_GetText("Downloading %s...(done)\n"),
 				filename);
+#ifdef HAVE_BLUA
+            if (luafiletransfers)
+			{
+                // Tell the server we have received the file
+                netbuffer->packettype = PT_HASLUAFILE;
+                strcpy(netbuffer->u.luafile, filename);
+                HSendPacket(servernode, true, 0, strlen(filename) + 1);
+			}
+#endif
 		}
 	}
 	else

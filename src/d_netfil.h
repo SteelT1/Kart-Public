@@ -13,6 +13,7 @@
 #ifndef __D_NETFIL__
 #define __D_NETFIL__
 
+#include "d_net.h"
 #include "w_wad.h"
 
 typedef enum
@@ -70,6 +71,34 @@ boolean SV_SendingFile(INT32 node);
 boolean CL_CheckDownloadable(void);
 boolean CL_SendRequestFile(void);
 boolean Got_RequestFilePak(INT32 node);
+
+#ifdef HAVE_BLUA
+typedef struct luafiletransfer_s
+{
+	char *filename;
+	char *realfilename;
+	INT32 id; // Callback ID
+	UINT8 nodestatus[MAXNETNODES]; // 0: waiting, 1: asked, 2: sending, 3: sent
+	struct luafiletransfer_s *next;
+} luafiletransfer_t;
+
+extern luafiletransfer_t *luafiletransfers;
+extern boolean waitingforluafiletransfer;
+
+void AddLuaFileTransfer(const char *filename);
+void SV_PrepareSendLuaFileToNextNode(void);
+boolean SV_SendLuaFile(INT32 node, const char *filename);
+void SV_PrepareSendLuaFile(const char *filename);
+void SV_HandleLuaFileSent(UINT8 node);
+void RemoveLuaFileTransfer(void);
+void RemoveLuaFileTransfers(void);
+void SV_AbortLuaFileTransfer(INT32 node);
+void CL_PrepareDownloadLuaFile(void);
+void Got_LuaFile(UINT8 **cp, INT32 playernum);
+void StoreLuaFileCallback(INT32 id);
+void RemoveLuaFileCallback(void);
+void MakePathDirs(char *path);
+#endif
 
 void SV_AbortSendFiles(INT32 node);
 void CloseNetFile(void);

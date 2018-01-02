@@ -18,15 +18,19 @@
 #include "lauxlib.h"
 #include "lualib.h"
 #include "../i_system.h"
-#include "../doomdef.h"
-#include "../m_misc.h"
-
+#include "../g_game.h"
+#include "../d_netfil.h"
+#include "../lua_libs.h"
+#include "../byteptr.h"
+#include "../lua_script.h"
 
 
 #define IO_INPUT	1
 #define IO_OUTPUT	2
 
-#define FILELIMIT 1024*1024 // Size limit for reading/writing files
+#define FILELIMIT (1024 * 1024) // Size limit for reading/writing files
+
+#define FMT_FILECALLBACKID "file_callback_%d"
 
 
 static const char *const fnames[] = {"input", "output"};
@@ -158,61 +162,159 @@ static int io_tostring (lua_State *L) {
   return 1;
 }
 
-static int StartsWith(const char *a, const char *b) // this is wolfs being lazy yet again
+
+// Create directories in the path
+void MakePathDirs(char *path)
 {
-   if(strncmp(a, b, strlen(b)) == 0) return 1;
-   return 0;
+	char *splitter = path;
+	char *forward = strchr(splitter, '/');
+	char *backward = strchr(splitter, '\\');
+	while ((splitter = (forward && backward) ? min(forward, backward) : (forward ?: backward)))
+	{
+		*splitter = 0;
+		I_mkdir(path, 0755);
+		*splitter = '/';
+		splitter++;
+
+		forward = strchr(splitter, '/');
+		backward = strchr(splitter, '\\');
+	}
 }
 
 
 static int io_open (lua_State *L) {
 	FILE **pf;
 	const char *filename = luaL_checkstring(L, 1);
-	int pass = 0;
+	boolean pass = false;
 	size_t i;
 	int length = strlen(filename);
-	char *splitter, *forward, *backward;
-	char *destFilename;
 	const char *mode = luaL_optstring(L, 2, "r");
 
 	for (i = 0; i < (sizeof (whitelist) / sizeof(const char *)); i++)
-	{
 		if (!stricmp(&filename[length - strlen(whitelist[i])], whitelist[i]))
 		{
-			pass = 1;
+			pass = true;
 			break;
 		}
-	}
-	if (strstr(filename, "..") || strchr(filename, ':') || StartsWith(filename, "\\")
-		|| StartsWith(filename, "/") || !pass)
+	if (strstr(filename, "./") || strstr(filename, ".\\")
+		|| strstr(filename, "..") || strchr(filename, ':')
+		|| filename[0] == '\\' || filename[0] == '/'
+		|| !pass)
 	{
-		luaL_error(L,"access denied to %s", filename);
+		luaL_error(L, "access denied to %s", filename);
 		return pushresult(L,0,filename);
 	}
 
-	destFilename = va("luafiles"PATHSEP"%s", filename);
+	luaL_checktype(L, 4, LUA_TFUNCTION);
 
-	// Make directories as needed
-	splitter = destFilename;
-
-    forward = strchr(splitter, '/');
-    backward = strchr(splitter, '\\');
-	while ((splitter = (forward && backward) ? min(forward, backward) : (forward ?: backward)))
+	if (lua_isnil(L, 3)) // Synched I/O // !!! Todo: handle "w" in synched I/O
 	{
-		*splitter = 0;
-		I_mkdir(destFilename, 0755);
-		*splitter = '/'; 
-		splitter++;
+		AddLuaFileTransfer(filename);
 
-        forward = strchr(splitter, '/');
-        backward = strchr(splitter, '\\');
+		/*pf = newfile(L);
+		*pf = fopen(realfilename, mode);
+		return (*pf == NULL) ? pushresult(L, 0, filename) : 1;*/
 	}
+	else if (lua_isuserdata(L, 3)) // Local I/O
+	{
+		char *realfilename = va("luafiles/%s", filename);
 
-	pf = newfile(L);
-	*pf = fopen(destFilename, mode);
-	return (*pf == NULL) ? pushresult(L, 0, filename) : 1;
+		player_t *player = *((player_t **)luaL_checkudata(L, 3, META_PLAYER));
+		if (!player)
+			return 0; // !!! Todo: error handling?
+
+		if (player != &players[consoleplayer])
+			return 0;
+
+ 		if (client && strnicmp(filename, "shared/", strlen("shared/")))
+			I_Error("Access denied to %s\n"
+					"Clients can only access files stored in luafiles/shared/\n",
+					filename);
+
+		MakePathDirs(realfilename);
+
+		// The callback is the last argument, no need to push it again
+
+		// Push the first argument (file handle) on the stack
+		pf = newfile(gL); // Create and push the file handle
+		*pf = fopen(realfilename, mode); // Open the file
+
+		// Push the second argument (file name) on the stack
+		lua_pushstring(gL, filename);
+
+		// Call the callback
+		if (lua_pcall(gL, 2, 0, 0)) { // !!! Todo: handle failure correctly?
+			if (cv_debug & DBG_LUA)
+				CONS_Alert(CONS_WARNING,"%s\n",lua_tostring(gL, -1));
+			lua_pop(gL, 1);
+		}
+
+		// Close the file
+		fclose(*pf);
+		*pf = NULL;
+	}
+	else
+		luaL_error(L, "Third argument should be either nil or a player_t");
+
+	return 0; // !!! Todo: error handling?
 }
 
+
+void Got_LuaFile(UINT8 **cp, INT32 playernum)
+{
+	FILE **pf;
+	char filename[128];
+
+	CONS_Printf("Got_LuaFile received from player %d\n", playernum);
+
+	READSTRING(*cp, filename); // !!! Todo: Check overflow
+
+	// Retrieve the callback and push it on the stack
+	lua_pushfstring(gL, FMT_FILECALLBACKID, luafiletransfers->id);
+	lua_gettable(gL, LUA_REGISTRYINDEX);
+
+	// Push the first argument (file handle) on the stack
+	pf = newfile(gL); // Create and push the file handle
+	*pf = fopen(luafiletransfers->realfilename, "r"); // Open the file
+
+	// Push the second argument (file name) on the stack
+	lua_pushstring(gL, filename);
+
+	// Call the callback
+	if (lua_pcall(gL, 2, 0, 0)) { // !!! Todo: handle failure correctly?
+		if (cv_debug & DBG_LUA)
+			CONS_Alert(CONS_WARNING,"%s\n",lua_tostring(gL, -1));
+		lua_pop(gL, 1);
+	}
+
+	// Close the file
+	fclose(*pf);
+	*pf = NULL;
+
+	if (client)
+		remove(luafiletransfers->realfilename);
+
+	RemoveLuaFileTransfer();
+
+	if (server && luafiletransfers)
+		SV_PrepareSendLuaFileToNextNode();
+}
+
+
+void StoreLuaFileCallback(INT32 id)
+{
+	lua_pushfstring(gL, FMT_FILECALLBACKID, id);
+	lua_pushvalue(gL, 4); // Parameter 4 is the callback
+	lua_settable(gL, LUA_REGISTRYINDEX); // registry[callbackid] = callback
+}
+
+
+void RemoveLuaFileCallback(void)
+{
+	lua_pushfstring(gL, FMT_FILECALLBACKID, 1); // !!!
+	lua_pushnil(gL);
+	lua_settable(gL, LUA_REGISTRYINDEX); // registry[callbackid] = nil
+}
 
 static int io_tmpfile (lua_State *L) {
   FILE **pf = newfile(L);
