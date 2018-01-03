@@ -4057,7 +4057,7 @@ FILESTAMP
 			if (client)
 			{
 				INT32 i;
-				for (i = 0; i < MAXNETNODES; i++)
+				for (i = 0; i < MAXPLAYERS; i++)
 					if (playeringame[i])
 						playerpingtable[i] = (tic_t)netbuffer->u.pingtable[i];
 			}
@@ -4191,7 +4191,10 @@ static INT16 Consistancy(void)
 
 #ifdef MOBJCONSISTANCY
 	if (!thinkercap.next)
+	{
+		DEBFILE(va("Consistancy = %u\n", ret));
 		return ret;
+	}
 	for (th = thinkercap.next; th != &thinkercap; th = th->next)
 	{
 		if (th->function.acp1 != (actionf_p1)P_MobjThinker)
@@ -4259,6 +4262,8 @@ static INT16 Consistancy(void)
 		}
 	}
 #endif
+
+	DEBFILE(va("Consistancy = %u\n", (ret & 0xFFFF)));
 
 	return (INT16)(ret & 0xFFFF);
 }
@@ -4621,8 +4626,8 @@ static inline void PingUpdate(void)
 	}
 
 	//send out our ping packets
-	for (i = 0; i < MAXPLAYERS; i++)
-		if (playeringame[i])
+	for (i = 0; i < MAXNETNODES; i++)
+		if (nodeingame[i])
 			HSendPacket(i, true, 0, sizeof(INT32) * MAXPLAYERS);
 
 	pingmeasurecount = 1; //Reset count
@@ -4652,20 +4657,15 @@ void NetUpdate(void)
 
 	gametime = nowtime;
 
-	if (!(gametime % 255) && netgame && server)
-	{
-#ifdef NEWPING
-		PingUpdate();
-#endif
-	}
-
 #ifdef NEWPING
 	if (server)
 	{
+		if (netgame && !(gametime % 255))
+			PingUpdate();
 		// update node latency values so we can take an average later.
-		for (i = 0; i < MAXNETNODES; i++)
+		for (i = 0; i < MAXPLAYERS; i++)
 			if (playeringame[i])
-				realpingtable[i] += G_TicsToMilliseconds(GetLag(i));
+				realpingtable[i] += G_TicsToMilliseconds(GetLag(playernode[i]));
 		pingmeasurecount++;
 	}
 #endif
