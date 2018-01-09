@@ -3913,14 +3913,11 @@ FILESTAMP
 			break;
 #ifdef HAVE_BLUA
 		case PT_ASKLUAFILE:
-			// !!!! Todo: Check name, handle multiple files, handle duplicate packets, check if requested
-			CONS_Printf("File \"%s\" asked, Sending it...\n", luafiletransfers->filename);
+			// !!!! Todo: Handle duplicate packets, check if requested
 			SV_SendLuaFile(node, va("luafiles/%s", luafiletransfers->filename));
-			//SV_SendLuaFile(node, (char*)netbuffer->u.textcmd); // !!! Todo: char* packet
 			break;
 		case PT_HASLUAFILE:
-			// !!!! Todo: Check name, handle multiple files, handle duplicate packets, check if requested
-			CONS_Printf("%s has file \"%s\"\n", player_names[netconsole], (char*)netbuffer->u.textcmd);
+			// !!!! Todo: Handle duplicate packets, check if requested
 			SV_HandleLuaFileSent(node);
 			break;
 #endif

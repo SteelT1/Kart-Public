@@ -566,8 +566,7 @@ void SV_PrepareSendLuaFileToNextNode(void)
 		{
 			// Tell the client we're about to send them the file
 			netbuffer->packettype = PT_SENDINGLUAFILE;
-			strcpy(netbuffer->u.luafile, luafiletransfers->filename);
-			if (!HSendPacket(i, true, 0, strlen(luafiletransfers->filename) + 1))
+			if (!HSendPacket(i, true, 0, 0))
 				I_Error("Failed to send a PT_SENDINGLUAFILE packet\n"); // !!! Todo: Handle failure a bit better lol
 
 			luafiletransfers->nodestatus[i]++; // Set status to "asked"
@@ -576,7 +575,6 @@ void SV_PrepareSendLuaFileToNextNode(void)
 		}
 
 	// No client found, everyone has the file
-	CONS_Printf("All clients have the file\n");
 	SendNetXCmd(XD_LUAFILE, luafiletransfers->filename, strlen(luafiletransfers->filename) + 1);
 }
 
@@ -1052,8 +1050,7 @@ void Got_Filetxpak(void)
 			{
                 // Tell the server we have received the file
                 netbuffer->packettype = PT_HASLUAFILE;
-                strcpy(netbuffer->u.luafile, filename);
-                HSendPacket(servernode, true, 0, strlen(filename) + 1);
+                HSendPacket(servernode, true, 0, 0);
 			}
 #endif
 		}

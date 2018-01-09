@@ -412,9 +412,6 @@ typedef struct
 #ifdef NEWPING
 		UINT32 pingtable[MAXPLAYERS];       //         128 bytes
 #endif
-#ifdef HAVE_BLUA
-		char luafile[128 + 1];
-#endif
 	} u; // This is needed to pack diff packet types data together
 } ATTRPACK doomdata_t;
 
