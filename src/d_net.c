@@ -838,6 +838,7 @@ static const char *packettypename[NUMPACKETTYPE] =
 	"RESYNCHEND",
 	"RESYNCHGET",
 
+	"SENDINGLUAFILE",
 	"ASKLUAFILE",
 	"HASLUAFILE",
 
