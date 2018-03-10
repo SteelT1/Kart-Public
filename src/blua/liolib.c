@@ -189,6 +189,7 @@ static int io_open (lua_State *L) {
 	size_t i;
 	int length = strlen(filename);
 	const char *mode = luaL_optstring(L, 2, "r");
+	luafiletransfer_t *filetransfer;
 
 	for (i = 0; i < (sizeof (whitelist) / sizeof(const char *)); i++)
 		if (!stricmp(&filename[length - strlen(whitelist[i])], whitelist[i]))
@@ -230,6 +231,13 @@ static int io_open (lua_State *L) {
 			I_Error("Access denied to %s\n"
 					"Clients can only access files stored in luafiles/shared/\n",
 					filename);
+
+		// Prevent access if the file is being downloaded
+		for (filetransfer = luafiletransfers; filetransfer; filetransfer = filetransfer->next)
+			if (!stricmp(filetransfer->filename, filename))
+				I_Error("Access denied to %s\n"
+						"Files can't be opened while being downloaded\n",
+						filename);
 
 		MakePathDirs(realfilename);
 
