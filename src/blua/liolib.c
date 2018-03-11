@@ -208,7 +208,7 @@ static int io_open (lua_State *L) {
 
 	luaL_checktype(L, 4, LUA_TFUNCTION);
 
-	if (lua_isnil(L, 3)) // Synched I/O // !!! Todo: handle "w" in synched I/O
+	if (lua_isnil(L, 3) && mode[0] == 'r') // Synched reading
 	{
 		AddLuaFileTransfer(filename);
 
@@ -216,16 +216,19 @@ static int io_open (lua_State *L) {
 		*pf = fopen(realfilename, mode);
 		return (*pf == NULL) ? pushresult(L, 0, filename) : 1;*/
 	}
-	else if (lua_isuserdata(L, 3)) // Local I/O
+	else // Local I/O or "synched" writing
 	{
 		char *realfilename = va("luafiles/%s", filename);
 
-		player_t *player = *((player_t **)luaL_checkudata(L, 3, META_PLAYER));
-		if (!player)
-			return LUA_ErrInvalid(L, "player_t");
+		if (!lua_isnoneornil(L, 3)) // Local I/O
+		{
+			player_t *player = *((player_t **)luaL_checkudata(L, 3, META_PLAYER));
+			if (!player)
+				return LUA_ErrInvalid(L, "player_t");
 
-		if (player != &players[consoleplayer])
-			return 0;
+			if (player != &players[consoleplayer])
+				return 0;
+		}
 
  		if (client && strnicmp(filename, "shared/", strlen("shared/")))
 			I_Error("Access denied to %s\n"
@@ -261,8 +264,6 @@ static int io_open (lua_State *L) {
 		fclose(*pf);
 		*pf = NULL;
 	}
-	else
-		luaL_error(L, "Third argument should be either nil or a player_t");
 
 	return 0; // !!! Todo: error handling?
 }
