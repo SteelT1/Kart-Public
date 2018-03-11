@@ -104,6 +104,7 @@ INT32 lastfilenum = -1;
 #ifdef HAVE_BLUA
 luafiletransfer_t *luafiletransfers = NULL;
 boolean waitingforluafiletransfer = false;
+char luafiledir[256] = "luafiles";
 #endif
 
 /** Fills a serverinfo packet with information about wad files loaded.
@@ -526,9 +527,11 @@ void AddLuaFileTransfer(const char *filename)
 
     // Create and allocate the real file name
 	if (server)
-		filetransfer->realfilename = strdup(va("luafiles/%s", filename));
+		filetransfer->realfilename = strdup(va("%s" PATHSEP "/%s",
+												luafiledir, filename));
 	else
-		filetransfer->realfilename = strdup(va("luafiles/shared/$$$%d%d.tmp", rand(), rand()));
+		filetransfer->realfilename = strdup(va("%s" PATHSEP "shared/$$$%d%d.tmp",
+												luafiledir, rand(), rand()));
     if (!filetransfer->realfilename)
 		I_Error("AddLuaFileTransfer: Out of memory\n");
 

@@ -84,6 +84,7 @@ typedef struct luafiletransfer_s
 
 extern luafiletransfer_t *luafiletransfers;
 extern boolean waitingforluafiletransfer;
+extern char luafiledir[256];
 
 void AddLuaFileTransfer(const char *filename);
 void SV_PrepareSendLuaFileToNextNode(void);
