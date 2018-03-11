@@ -222,7 +222,7 @@ static int io_open (lua_State *L) {
 
 		player_t *player = *((player_t **)luaL_checkudata(L, 3, META_PLAYER));
 		if (!player)
-			return 0; // !!! Todo: error handling?
+			return LUA_ErrInvalid(L, "player_t");
 
 		if (player != &players[consoleplayer])
 			return 0;
