@@ -249,6 +249,11 @@ static int io_open (lua_State *L) {
 		// Push the first argument (file handle) on the stack
 		pf = newfile(gL); // Create and push the file handle
 		*pf = fopen(realfilename, mode); // Open the file
+		if (!*pf)
+		{
+			lua_pop(gL, 1);
+			lua_pushnil(gL);
+		}
 
 		// Push the second argument (file name) on the stack
 		lua_pushstring(gL, filename);
@@ -261,8 +266,11 @@ static int io_open (lua_State *L) {
 		}
 
 		// Close the file
-		fclose(*pf);
-		*pf = NULL;
+		if (*pf)
+		{
+			fclose(*pf);
+			*pf = NULL;
+		}
 	}
 
 	return 0; // !!! Todo: error handling?
@@ -285,6 +293,11 @@ void Got_LuaFile(UINT8 **cp, INT32 playernum)
 	// Push the first argument (file handle) on the stack
 	pf = newfile(gL); // Create and push the file handle
 	*pf = fopen(luafiletransfers->realfilename, "r"); // Open the file
+	if (!*pf)
+	{
+		lua_pop(gL, 1);
+		lua_pushnil(gL);
+	}
 
 	// Push the second argument (file name) on the stack
 	lua_pushstring(gL, filename);
@@ -297,8 +310,11 @@ void Got_LuaFile(UINT8 **cp, INT32 playernum)
 	}
 
 	// Close the file
-	fclose(*pf);
-	*pf = NULL;
+	if (*pf)
+	{
+		fclose(*pf);
+		*pf = NULL;
+	}
 
 	if (client)
 		remove(luafiletransfers->realfilename);
