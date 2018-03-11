@@ -136,14 +136,6 @@ static int aux_close (lua_State *L) {
 }
 
 
-static int io_close (lua_State *L) {
-  if (lua_isnone(L, 1))
-    lua_rawgeti(L, LUA_ENVIRONINDEX, IO_OUTPUT);
-  tofile(L);  /* make sure argument is a file */
-  return aux_close(L);
-}
-
-
 static int io_gc (lua_State *L) {
   FILE *f = *tofilep(L);
   /* ignore closed files */
@@ -643,7 +635,6 @@ static int f_flush (lua_State *L) {
 
 
 static const luaL_Reg iolib[] = {
-  {"close", io_close},
   {"flush", io_flush},
   {"input", io_input},
   {"lines", io_lines},
@@ -658,7 +649,6 @@ static const luaL_Reg iolib[] = {
 
 
 static const luaL_Reg flib[] = {
-  {"close", io_close},
   {"flush", f_flush},
   {"lines", f_lines},
   {"read", f_read},
