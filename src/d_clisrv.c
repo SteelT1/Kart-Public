@@ -3917,12 +3917,12 @@ FILESTAMP
 			break;
 #ifdef HAVE_BLUA
 		case PT_ASKLUAFILE:
-			// !!!! Todo: Handle duplicate packets, check if requested
-			SV_SendLuaFile(node, va("%s" PATHSEP "%s", luafiledir, luafiletransfers->filename));
+			if (server && luafiletransfers && luafiletransfers->nodestatus[node] == 1)
+				SV_SendLuaFile(node, va("%s" PATHSEP "%s", luafiledir, luafiletransfers->filename));
 			break;
 		case PT_HASLUAFILE:
-			// !!!! Todo: Handle duplicate packets, check if requested
-			SV_HandleLuaFileSent(node);
+			if (server && luafiletransfers && luafiletransfers->nodestatus[node] == 2)
+				SV_HandleLuaFileSent(node);
 			break;
 #endif
 // -------------------------------------------- CLIENT RECEIVE ----------
@@ -4088,8 +4088,8 @@ FILESTAMP
 			break;
 #ifdef HAVE_BLUA
 		case PT_SENDINGLUAFILE:
-			// !!! Todo: Check name, handle multiple files, handle duplicate packets, check server
-			CL_PrepareDownloadLuaFile();
+			if (client)
+				CL_PrepareDownloadLuaFile();
 			break;
 #endif
 		default:
