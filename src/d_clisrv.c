@@ -3918,7 +3918,7 @@ FILESTAMP
 #ifdef HAVE_BLUA
 		case PT_ASKLUAFILE:
 			// !!!! Todo: Handle duplicate packets, check if requested
-			SV_SendLuaFile(node, va("luafiles/%s", luafiletransfers->filename));
+			SV_SendLuaFile(node, va("%s" PATHSEP "%s", luafiledir, luafiletransfers->filename));
 			break;
 		case PT_HASLUAFILE:
 			// !!!! Todo: Handle duplicate packets, check if requested

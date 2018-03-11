@@ -218,7 +218,7 @@ static int io_open (lua_State *L) {
 	}
 	else // Local I/O or "synched" writing
 	{
-		char *realfilename = va("luafiles/%s", filename);
+		char *realfilename = va("%s" PATHSEP "%s", luafiledir, filename);
 
 		if (!lua_isnoneornil(L, 3)) // Local I/O
 		{
