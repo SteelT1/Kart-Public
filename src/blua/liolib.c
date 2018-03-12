@@ -200,9 +200,9 @@ static int io_open (lua_State *L) {
 
 	luaL_checktype(L, 4, LUA_TFUNCTION);
 
-	if (lua_isnil(L, 3) && mode[0] == 'r') // Synched reading
+	if (lua_isnil(L, 3) && (strchr(mode, 'r') || strchr(mode, '+'))) // Synched reading
 	{
-		AddLuaFileTransfer(filename);
+		AddLuaFileTransfer(filename, mode);
 
 		/*pf = newfile(L);
 		*pf = fopen(realfilename, mode);
@@ -280,7 +280,7 @@ void Got_LuaFile(UINT8 **cp, INT32 playernum)
 
 	// Push the first argument (file handle) on the stack
 	pf = newfile(gL); // Create and push the file handle
-	*pf = fopen(luafiletransfers->realfilename, "r"); // Open the file
+	*pf = fopen(luafiletransfers->realfilename, luafiletransfers->mode); // Open the file
 	if (!*pf)
 	{
 		lua_pop(gL, 1);

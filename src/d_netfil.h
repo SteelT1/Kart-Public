@@ -77,6 +77,7 @@ typedef struct luafiletransfer_s
 {
 	char *filename;
 	char *realfilename;
+	char mode[4]; // rb+/wb+/ab+ + null character
 	INT32 id; // Callback ID
 	UINT8 nodestatus[MAXNETNODES]; // 0: waiting, 1: asked, 2: sending, 3: sent
 	struct luafiletransfer_s *next;
@@ -86,7 +87,7 @@ extern luafiletransfer_t *luafiletransfers;
 extern boolean waitingforluafiletransfer;
 extern char luafiledir[256];
 
-void AddLuaFileTransfer(const char *filename);
+void AddLuaFileTransfer(const char *filename, const char *mode);
 void SV_PrepareSendLuaFileToNextNode(void);
 boolean SV_SendLuaFile(INT32 node, const char *filename);
 void SV_PrepareSendLuaFile(const char *filename);

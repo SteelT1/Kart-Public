@@ -500,7 +500,7 @@ void CL_LoadServerFiles(void)
 }
 
 #ifdef HAVE_BLUA
-void AddLuaFileTransfer(const char *filename)
+void AddLuaFileTransfer(const char *filename, const char *mode)
 {
 	luafiletransfer_t **prevnext; // A pointer to the "next" field of the last transfer in the list
 	luafiletransfer_t *filetransfer;
@@ -537,6 +537,8 @@ void AddLuaFileTransfer(const char *filename)
 
     if (!luafiletransfers->realfilename)
 		I_Error("AddLuaFileTransfer: Out of memory\n");
+
+	strlcpy(filetransfer->mode, mode, sizeof(filetransfer->mode));
 
 	if (server)
 	{
