@@ -535,9 +535,6 @@ void AddLuaFileTransfer(const char *filename, const char *mode)
     if (!filetransfer->realfilename)
 		I_Error("AddLuaFileTransfer: Out of memory\n");
 
-    if (!luafiletransfers->realfilename)
-		I_Error("AddLuaFileTransfer: Out of memory\n");
-
 	strlcpy(filetransfer->mode, mode, sizeof(filetransfer->mode));
 
 	if (server)
