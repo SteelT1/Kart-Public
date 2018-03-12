@@ -251,11 +251,7 @@ static int io_open (lua_State *L) {
 		lua_pushstring(gL, filename);
 
 		// Call the callback
-		if (lua_pcall(gL, 2, 0, 0)) { // !!! Todo: handle failure correctly?
-			if (cv_debug & DBG_LUA)
-				CONS_Alert(CONS_WARNING,"%s\n",lua_tostring(gL, -1));
-			lua_pop(gL, 1);
-		}
+		LUA_Call(gL, 2);
 
 		// Close the file
 		if (*pf)
@@ -295,11 +291,7 @@ void Got_LuaFile(UINT8 **cp, INT32 playernum)
 	lua_pushstring(gL, filename);
 
 	// Call the callback
-	if (lua_pcall(gL, 2, 0, 0)) { // !!! Todo: handle failure correctly?
-		if (cv_debug & DBG_LUA)
-			CONS_Alert(CONS_WARNING,"%s\n",lua_tostring(gL, -1));
-		lua_pop(gL, 1);
-	}
+	LUA_Call(gL, 2);
 
 	// Close the file
 	if (*pf)
