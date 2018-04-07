@@ -45,6 +45,7 @@ typedef struct
 	UINT32 currentsize;
 	UINT32 totalsize;
 	filestatus_t status; // The value returned by recsearch
+	boolean textmode; // For files requested by Lua without the "b" option
 } fileneeded_t;
 
 extern INT32 fileneedednum;
@@ -89,7 +90,7 @@ extern char luafiledir[256];
 
 void AddLuaFileTransfer(const char *filename, const char *mode);
 void SV_PrepareSendLuaFileToNextNode(void);
-boolean SV_SendLuaFile(INT32 node, const char *filename);
+boolean SV_SendLuaFile(INT32 node, const char *filename, boolean textmode);
 void SV_PrepareSendLuaFile(const char *filename);
 void SV_HandleLuaFileSent(UINT8 node);
 void RemoveLuaFileTransfer(void);

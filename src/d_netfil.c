@@ -76,6 +76,7 @@ typedef struct filetx_s
 	UINT32 size; // Size of the file
 	UINT8 fileid;
 	INT32 node; // Destination
+	boolean textmode; // For files requested by Lua without the "b" option
 	struct filetx_s *next; // Next file in the list
 } filetx_t;
 
@@ -179,6 +180,7 @@ void D_ParseFileneeded(INT32 fileneedednum_parm, UINT8 *fileneededstr)
 		fileneeded[i].file = NULL; // The file isn't open yet
 		READSTRINGN(p, fileneeded[i].filename, MAX_WADPATH); // The next bytes are the file name
 		READMEM(p, fileneeded[i].md5sum, 16); // The last 16 bytes are the file checksum
+		fileneeded[i].textmode = false;
 	}
 }
 
@@ -190,6 +192,7 @@ void CL_PrepareDownloadSaveGame(const char *tmpsave)
 	fileneeded[0].file = NULL;
 	memset(fileneeded[0].md5sum, 0, 16);
 	strcpy(fileneeded[0].filename, tmpsave);
+	fileneeded[0].textmode = false;
 }
 
 /** Checks the server to see if we CAN download all the files,
@@ -637,6 +640,7 @@ void CL_PrepareDownloadLuaFile(void)
 	fileneeded[0].file = NULL;
 	memset(fileneeded[0].md5sum, 0, 16);
 	strcpy(fileneeded[0].filename, luafiletransfers->realfilename);
+	fileneeded[0].textmode = !strchr(luafiletransfers->mode, 'b');
 
 	// Make sure all directories in the file path exist
 	MakePathDirs(fileneeded[0].filename);
@@ -785,7 +789,7 @@ void SV_SendRam(INT32 node, void *data, size_t size, freemethod_t freemethod, UI
   * \sa SV_SendRam
   *
   */
-boolean SV_SendLuaFile(INT32 node, const char *filename)
+boolean SV_SendLuaFile(INT32 node, const char *filename, boolean textmode)
 {
 	filetx_t **q; // A pointer to the "next" field of the last file in the list
 	filetx_t *p; // The new file request
@@ -815,6 +819,9 @@ boolean SV_SendLuaFile(INT32 node, const char *filename)
 	// Set the file name and get rid of the path
 	strlcpy(p->id.filename, filename, MAX_WADPATH); // !!!
 	//nameonly(p->id.filename);
+
+	// Open in text mode if required by the Lua script
+	p->textmode = textmode;
 
 	DEBFILE(va("Sending Lua file %s to %d\n", filename, node));
 	p->ram = SF_FILE; // It's a file, we need to close it and free its name once we're done sending it
@@ -929,7 +936,7 @@ void SV_FileSendTicker(void)
 				long filesize;
 
 				transfer[i].currentfile =
-					fopen(f->id.filename, "rb");
+					fopen(f->id.filename, f->textmode ? "r" : "rb");
 
 				if (!transfer[i].currentfile)
 					I_Error("File %s does not exist",
@@ -1014,7 +1021,7 @@ void Got_Filetxpak(void)
 	{
 		if (file->file)
 			I_Error("Got_Filetxpak: already open file\n");
-		file->file = fopen(filename, "wb");
+		file->file = fopen(filename, file->textmode ? "w" : "wb");
 		if (!file->file)
 			I_Error("Can't create file %s: %s", filename, strerror(errno));
 		CONS_Printf("\r%s...\n",filename);

@@ -3918,7 +3918,11 @@ FILESTAMP
 #ifdef HAVE_BLUA
 		case PT_ASKLUAFILE:
 			if (server && luafiletransfers && luafiletransfers->nodestatus[node] == 1)
-				SV_SendLuaFile(node, va("%s" PATHSEP "%s", luafiledir, luafiletransfers->filename));
+			{
+				char *name = va("%s" PATHSEP "%s", luafiledir, luafiletransfers->filename);
+				boolean textmode = !strchr(luafiletransfers->mode, 'b');
+				SV_SendLuaFile(node, name, textmode);
+			}
 			break;
 		case PT_HASLUAFILE:
 			if (server && luafiletransfers && luafiletransfers->nodestatus[node] == 2)
