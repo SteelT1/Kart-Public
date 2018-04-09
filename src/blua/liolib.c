@@ -272,7 +272,7 @@ void Got_LuaFile(UINT8 **cp, INT32 playernum)
 
 	CONS_Printf("Got_LuaFile received from player %d\n", playernum);
 
-	READSTRING(*cp, filename); // !!! Todo: Check overflow
+	READSTRINGN(*cp, filename, sizeof(filename) - 1);
 
 	// Retrieve the callback and push it on the stack
 	lua_pushfstring(gL, FMT_FILECALLBACKID, luafiletransfers->id);
