@@ -967,11 +967,20 @@ void SV_FileSendTicker(void)
 			size = f->size-transfer[i].position;
 		if (ram)
 			M_Memcpy(p->data, &f->id.ram[transfer[i].position], size);
-		else if (fread(p->data, 1, size, transfer[i].currentfile) != size)
-			I_Error("SV_FileSendTicker: can't read %s byte on %s at %d because %s", sizeu1(size), f->id.filename, transfer[i].position, strerror(ferror(transfer[i].currentfile)));
+		else
+		{
+			size_t n = fread(p->data, 1, size, transfer[i].currentfile);
+			if (n != size) // Either an error or Windows turning CR-LF into LF
+			{
+				if (f->textmode && feof(transfer[i].currentfile))
+                    size = n;
+				else
+					I_Error("SV_FileSendTicker: can't read %s byte on %s at %d because %s", sizeu1(size), f->id.filename, transfer[i].position, strerror(ferror(transfer[i].currentfile)));
+			}
+		}
 		p->position = LONG(transfer[i].position);
 		// Put flag so receiver knows the total size
-		if (transfer[i].position + size == f->size)
+		if (transfer[i].position + size == f->size || (f->textmode && feof(transfer[i].currentfile)))
 			p->position |= LONG(0x80000000);
 		p->fileid = f->fileid;
 		p->size = SHORT((UINT16)size);
@@ -980,7 +989,7 @@ void SV_FileSendTicker(void)
 		if (HSendPacket(i, true, 0, FILETXHEADER + size)) // Reliable SEND
 		{ // Success
 			transfer[i].position = (UINT32)(transfer[i].position + size);
-			if (transfer[i].position == f->size) // Finish?
+			if (transfer[i].position == f->size || (f->textmode && feof(transfer[i].currentfile))) // Finish?
 				SV_EndFileSend(i);
 		}
 		else
@@ -1042,7 +1051,7 @@ void Got_Filetxpak(void)
 		}
 		// We can receive packet in the wrong order, anyway all os support gaped file
 		fseek(file->file, pos, SEEK_SET);
-		if (fwrite(netbuffer->u.filetxpak.data,size,1,file->file) != 1)
+		if (size && fwrite(netbuffer->u.filetxpak.data,size,1,file->file) != 1)
 			I_Error("Can't write to %s: %s\n",filename, strerror(ferror(file->file)));
 		file->currentsize += size;
 
