@@ -593,7 +593,7 @@ void RemoveLuaFileTransfer(void)
 {
 	luafiletransfer_t *filetransfer = luafiletransfers;
 
-	RemoveLuaFileCallback();
+	RemoveLuaFileCallback(filetransfer->id);
 
 	luafiletransfers = filetransfer->next;
 

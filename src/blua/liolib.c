@@ -318,9 +318,9 @@ void StoreLuaFileCallback(INT32 id)
 }
 
 
-void RemoveLuaFileCallback(void)
+void RemoveLuaFileCallback(INT32 id)
 {
-	lua_pushfstring(gL, FMT_FILECALLBACKID, 1); // !!!
+	lua_pushfstring(gL, FMT_FILECALLBACKID, id);
 	lua_pushnil(gL);
 	lua_settable(gL, LUA_REGISTRYINDEX); // registry[callbackid] = nil
 }
