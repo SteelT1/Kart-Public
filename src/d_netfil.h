@@ -74,13 +74,21 @@ boolean CL_SendRequestFile(void);
 boolean Got_RequestFilePak(INT32 node);
 
 #ifdef HAVE_BLUA
+typedef enum
+{
+	LFTNS_WAITING, // This node is waiting for the server to send the file
+	LFTNS_ASKED, // The server has told the node they're ready to send the file
+	LFTNS_SENDING, // The server is sending the file to this node
+	LFTNS_SENT // The node already has the file
+} luafiletransfernodestatus_t;
+
 typedef struct luafiletransfer_s
 {
 	char *filename;
 	char *realfilename;
 	char mode[4]; // rb+/wb+/ab+ + null character
 	INT32 id; // Callback ID
-	UINT8 nodestatus[MAXNETNODES]; // 0: waiting, 1: asked, 2: sending, 3: sent
+	luafiletransfernodestatus_t nodestatus[MAXNETNODES];
 	struct luafiletransfer_s *next;
 } luafiletransfer_t;
 

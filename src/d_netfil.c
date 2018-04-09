@@ -543,7 +543,7 @@ void AddLuaFileTransfer(const char *filename, const char *mode)
 	if (server)
 	{
 		// Set status to "waiting" for everyone
-		memset(filetransfer->nodestatus, 0, MAXNETNODES);
+		memset(filetransfer->nodestatus, LFTNS_WAITING, MAXNETNODES);
 
 		if (!luafiletransfers->next) // Only if there is no transfer already going on
 			SV_PrepareSendLuaFileToNextNode();
@@ -567,14 +567,14 @@ void SV_PrepareSendLuaFileToNextNode(void)
 
     // Find a client to send the file to
 	for (i = 1; i < MAXNETNODES; i++)
-		if (nodeingame[i] && luafiletransfers->nodestatus[i] == 0) // Node waiting
+		if (nodeingame[i] && luafiletransfers->nodestatus[i] == LFTNS_WAITING) // Node waiting
 		{
 			// Tell the client we're about to send them the file
 			netbuffer->packettype = PT_SENDINGLUAFILE;
 			if (!HSendPacket(i, true, 0, 0))
 				I_Error("Failed to send a PT_SENDINGLUAFILE packet\n"); // !!! Todo: Handle failure a bit better lol
 
-			luafiletransfers->nodestatus[i]++; // Set status to "asked"
+			luafiletransfers->nodestatus[i] = LFTNS_ASKED;
 
 			return;
 		}
@@ -585,7 +585,7 @@ void SV_PrepareSendLuaFileToNextNode(void)
 
 void SV_HandleLuaFileSent(UINT8 node)
 {
-	luafiletransfers->nodestatus[node]++; // Set status as "sent"
+	luafiletransfers->nodestatus[node] = LFTNS_SENT;
     SV_PrepareSendLuaFileToNextNode();
 }
 
@@ -611,10 +611,10 @@ void RemoveLuaFileTransfers(void)
 void SV_AbortLuaFileTransfer(INT32 node)
 {
 	if (luafiletransfers
-	&& (luafiletransfers->nodestatus[node] == 1 // Asked
-	||  luafiletransfers->nodestatus[node] == 2)) // Sending
+	&& (luafiletransfers->nodestatus[node] == LFTNS_ASKED
+	||  luafiletransfers->nodestatus[node] == LFTNS_SENDING))
 	{
-		luafiletransfers->nodestatus[node] = 0; // Set status to "waiting"
+		luafiletransfers->nodestatus[node] = LFTNS_WAITING;
 		SV_PrepareSendLuaFileToNextNode();
 	}
 }
@@ -796,7 +796,7 @@ boolean SV_SendLuaFile(INT32 node, const char *filename, boolean textmode)
 	//INT32 i;
 	//char wadfilename[MAX_WADPATH];
 
-	luafiletransfers->nodestatus[node]++; // Set status to "sending"
+	luafiletransfers->nodestatus[node] = LFTNS_SENDING;
 
 	// Find the last file in the list and set a pointer to its "next" field
 	q = &transfer[node].txlist;
