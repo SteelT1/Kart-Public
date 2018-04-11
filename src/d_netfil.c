@@ -542,8 +542,11 @@ void AddLuaFileTransfer(const char *filename, const char *mode)
 
 	if (server)
 	{
+		INT32 i;
+
 		// Set status to "waiting" for everyone
-		memset(filetransfer->nodestatus, LFTNS_WAITING, MAXNETNODES);
+		for (i = 0; i < MAXNETNODES; i++)
+			filetransfer->nodestatus[i] = LFTNS_WAITING;
 
 		if (!luafiletransfers->next) // Only if there is no transfer already going on
 			SV_PrepareSendLuaFileToNextNode();
