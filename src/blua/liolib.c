@@ -23,6 +23,7 @@
 #include "../lua_libs.h"
 #include "../byteptr.h"
 #include "../lua_script.h"
+#include "../m_misc.h"
 
 
 #define IO_INPUT	1
@@ -268,45 +269,57 @@ static int io_open (lua_State *L) {
 void Got_LuaFile(UINT8 **cp, INT32 playernum)
 {
 	FILE **pf;
-	char filename[128];
+	boolean success = READUINT8(*cp); // The first (and only) byte indicates whether the file could be opened
 
 	CONS_Printf("Got_LuaFile received from player %d\n", playernum);
-
-	READSTRINGN(*cp, filename, sizeof(filename) - 1);
 
 	// Retrieve the callback and push it on the stack
 	lua_pushfstring(gL, FMT_FILECALLBACKID, luafiletransfers->id);
 	lua_gettable(gL, LUA_REGISTRYINDEX);
 
-	// Push the first argument (file handle) on the stack
-	pf = newfile(gL); // Create and push the file handle
-	*pf = fopen(luafiletransfers->realfilename, luafiletransfers->mode); // Open the file
-	if (!*pf)
+	// Push the first argument (file handle or nil) on the stack
+	if (success)
 	{
-		lua_pop(gL, 1);
-		lua_pushnil(gL);
+		pf = newfile(gL); // Create and push the file handle
+		*pf = fopen(luafiletransfers->realfilename, luafiletransfers->mode); // Open the file
+		if (!*pf)
+			I_Error("Can't open file \"%s\"\n", luafiletransfers->realfilename); // The file SHOULD exist
 	}
+	else
+		lua_pushnil(gL);
 
 	// Push the second argument (file name) on the stack
-	lua_pushstring(gL, filename);
+	lua_pushstring(gL, luafiletransfers->filename);
 
 	// Call the callback
 	LUA_Call(gL, 2);
 
-	// Close the file
-	if (*pf)
+	if (success)
 	{
-		fclose(*pf);
-		*pf = NULL;
-	}
+		// Close the file
+		if (*pf)
+		{
+			fclose(*pf);
+			*pf = NULL;
+		}
 
-	if (client)
-		remove(luafiletransfers->realfilename);
+		if (client)
+			remove(luafiletransfers->realfilename);
+	}
 
 	RemoveLuaFileTransfer();
 
 	if (server && luafiletransfers)
-		SV_PrepareSendLuaFileToNextNode();
+	{
+		if (FIL_FileOK(luafiletransfers->realfilename))
+			SV_PrepareSendLuaFileToNextNode();
+		else
+		{
+			// Send a net command with 0 as its first byte to indicate the file couldn't be opened
+			UINT8 success = 0;
+			SendNetXCmd(XD_LUAFILE, &success, 1);
+		}
+	}
 }
 
 
