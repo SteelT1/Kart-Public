@@ -273,6 +273,9 @@ void Got_LuaFile(UINT8 **cp, INT32 playernum)
 
 	CONS_Printf("Got_LuaFile received from player %d\n", playernum);
 
+	if (!luafiletransfers)
+		I_Error("No Lua file transfer\n");
+
 	// Retrieve the callback and push it on the stack
 	lua_pushfstring(gL, FMT_FILECALLBACKID, luafiletransfers->id);
 	lua_gettable(gL, LUA_REGISTRYINDEX);
