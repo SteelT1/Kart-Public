@@ -271,8 +271,6 @@ void Got_LuaFile(UINT8 **cp, INT32 playernum)
 	FILE **pf;
 	boolean success = READUINT8(*cp); // The first (and only) byte indicates whether the file could be opened
 
-	CONS_Printf("Got_LuaFile received from player %d\n", playernum);
-
 	if (!luafiletransfers)
 		I_Error("No Lua file transfer\n");
 

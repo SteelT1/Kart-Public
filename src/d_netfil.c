@@ -644,7 +644,6 @@ void CL_PrepareDownloadLuaFile(void)
 	}
 
 	// Tell the server we are ready to receive the file
-	CONS_Printf("Receiving Lua file \"%s\"...\n", luafiletransfers->realfilename);
 	netbuffer->packettype = PT_ASKLUAFILE;
 	HSendPacket(servernode, true, 0, 0);
 
