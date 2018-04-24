@@ -271,6 +271,20 @@ void Got_LuaFile(UINT8 **cp, INT32 playernum)
 	FILE **pf;
 	boolean success = READUINT8(*cp); // The first (and only) byte indicates whether the file could be opened
 
+	if (playernum != serverplayer)
+	{
+		CONS_Alert(CONS_WARNING, M_GetText("Illegal luafile command received from %s\n"), player_names[playernum]);
+		if (server)
+		{
+			XBOXSTATIC UINT8 buf[2];
+
+			buf[0] = (UINT8)playernum;
+			buf[1] = KICK_MSG_CON_FAIL;
+			SendNetXCmd(XD_KICK, &buf, 2);
+		}
+		return;
+	}
+
 	if (!luafiletransfers)
 		I_Error("No Lua file transfer\n");
 
