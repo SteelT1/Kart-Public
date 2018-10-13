@@ -160,17 +160,12 @@ static int io_tostring (lua_State *L) {
 void MakePathDirs(char *path)
 {
 	char *splitter = path;
-	char *forward = strchr(splitter, '/');
-	char *backward = strchr(splitter, '\\');
-	while ((splitter = (forward && backward) ? min(forward, backward) : (forward ?: backward)))
+	while ((splitter = strchr(splitter, '/')))
 	{
 		*splitter = 0;
 		I_mkdir(path, 0755);
 		*splitter = '/';
 		splitter++;
-
-		forward = strchr(splitter, '/');
-		backward = strchr(splitter, '\\');
 	}
 }
 
@@ -184,15 +179,21 @@ static int io_open (lua_State *L) {
 	const char *mode = luaL_optstring(L, 2, "r");
 	luafiletransfer_t *filetransfer;
 
+	if (strchr(filename, '\\'))
+	{
+		luaL_error(L, "access denied to %s: \\ is not allowed, use / instead", filename);
+		return pushresult(L,0,filename);
+	}
+
 	for (i = 0; i < (sizeof (whitelist) / sizeof(const char *)); i++)
 		if (!stricmp(&filename[length - strlen(whitelist[i])], whitelist[i]))
 		{
 			pass = true;
 			break;
 		}
-	if (strstr(filename, "./") || strstr(filename, ".\\")
+	if (strstr(filename, "./")
 		|| strstr(filename, "..") || strchr(filename, ':')
-		|| filename[0] == '\\' || filename[0] == '/'
+		|| filename[0] == '/'
 		|| !pass)
 	{
 		luaL_error(L, "access denied to %s", filename);
