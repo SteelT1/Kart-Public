@@ -210,19 +210,16 @@ static int io_open (lua_State *L) {
 		*pf = fopen(realfilename, mode);
 		return (*pf == NULL) ? pushresult(L, 0, filename) : 1;*/
 	}
-	else // Local I/O or "synched" writing
+	else // Local I/O
 	{
 		char *realfilename = va("%s" PATHSEP "%s", luafiledir, filename);
+		player_t *player = *((player_t **)luaL_checkudata(L, 3, META_PLAYER));
 
-		if (!lua_isnoneornil(L, 3)) // Local I/O
-		{
-			player_t *player = *((player_t **)luaL_checkudata(L, 3, META_PLAYER));
-			if (!player)
-				return LUA_ErrInvalid(L, "player_t");
+		if (!player)
+			return LUA_ErrInvalid(L, "player_t");
 
-			if (player != &players[consoleplayer])
-				return 0;
-		}
+		if (player != &players[consoleplayer])
+			return 0;
 
  		if (client && strnicmp(filename, "shared/", strlen("shared/")))
 			I_Error("Access denied to %s\n"
