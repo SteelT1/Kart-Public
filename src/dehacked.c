@@ -8335,6 +8335,7 @@ static const char *const KARTSTUFF_LIST[] = {
 	"ITEMBLINKMODE",
 	"GETSPARKS",
 	"JAWZTARGETDELAY"
+	"SPECTATEWAIT"
 };
 
 static const char *const HUDITEMS_LIST[] = {
