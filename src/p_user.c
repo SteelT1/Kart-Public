@@ -8097,6 +8097,8 @@ void P_ResetCamera(player_t *player, camera_t *thiscam)
 
 boolean P_MoveChaseCamera(player_t *player, camera_t *thiscam, boolean resetcalled)
 {
+	static UINT8 lookbackdelay[4] = {0,0,0,0};
+	UINT8 num;
 	angle_t angle = 0, focusangle = 0, focusaiming = 0;
 	fixed_t x, y, z, dist, height, viewpointx, viewpointy, camspeed, camdist, camheight, pviewheight;
 	fixed_t pan, xpan, ypan;
@@ -8225,6 +8227,7 @@ boolean P_MoveChaseCamera(player_t *player, camera_t *thiscam, boolean resetcall
 
 	if (thiscam == &camera)
 	{
+		num = 0;
 		camspeed = cv_cam_speed.value;
 		camstill = cv_cam_still.value;
 		camrotate = cv_cam_rotate.value;
@@ -8234,6 +8237,7 @@ boolean P_MoveChaseCamera(player_t *player, camera_t *thiscam, boolean resetcall
 	}
 	else if (thiscam == &camera2) // Camera 2
 	{
+		num = 1;
 		camspeed = cv_cam2_speed.value;
 		camstill = cv_cam2_still.value;
 		camrotate = cv_cam2_rotate.value;
@@ -8243,6 +8247,7 @@ boolean P_MoveChaseCamera(player_t *player, camera_t *thiscam, boolean resetcall
 	}
 	else if (thiscam == &camera3) // Camera 3
 	{
+		num = 2;
 		camspeed = cv_cam3_speed.value;
 		camstill = cv_cam3_still.value;
 		camrotate = cv_cam3_rotate.value;
@@ -8252,6 +8257,7 @@ boolean P_MoveChaseCamera(player_t *player, camera_t *thiscam, boolean resetcall
 	}
 	else // Camera 4
 	{
+		num = 3;
 		camspeed = cv_cam4_speed.value;
 		camstill = cv_cam4_still.value;
 		camrotate = cv_cam4_rotate.value;
@@ -8274,12 +8280,16 @@ boolean P_MoveChaseCamera(player_t *player, camera_t *thiscam, boolean resetcall
 	}
 	else if (player->exiting) // SRB2Kart: Leave the camera behind while exiting, for dramatic effect!
 		camstill = true;
-	else if (lookback) // SRB2kart - Camera flipper
+	else if (lookback || lookbackdelay[num]) // SRB2kart - Camera flipper
 	{
-		camrotate += 180;
-		camspeed *= 2;
-		if (camspeed > FRACUNIT)
-			camspeed = FRACUNIT;
+		camspeed = FRACUNIT;
+		if (lookback)
+		{
+			camrotate += 180;
+			lookbackdelay[num] = 2;
+		}
+		else
+			lookbackdelay[num]--;
 	}
 
 	if (mo->eflags & MFE_VERTICALFLIP)
@@ -8287,6 +8297,9 @@ boolean P_MoveChaseCamera(player_t *player, camera_t *thiscam, boolean resetcall
 
 	if (splitscreen == 1)
 		camspeed = (3*camspeed)/4;
+
+	if (camspeed > FRACUNIT)
+		camspeed = FRACUNIT;
 
 	if (timeover)
 		angle = mo->angle + FixedAngle(camrotate*FRACUNIT);
@@ -8296,16 +8309,21 @@ boolean P_MoveChaseCamera(player_t *player, camera_t *thiscam, boolean resetcall
 		angle = thiscam->angle;
 	else
 	{
-		angle_t input = focusangle + FixedAngle(camrotate<<FRACBITS) - thiscam->angle;
-		boolean invert = (input > ANGLE_180);
-		if (invert)
-			input = InvAngle(input);
+		if (camspeed == FRACUNIT)
+			angle = focusangle + FixedAngle(camrotate<<FRACBITS);
+		else
+		{
+			angle_t input = focusangle + FixedAngle(camrotate<<FRACBITS) - thiscam->angle;
+			boolean invert = (input > ANGLE_180);
+			if (invert)
+				input = InvAngle(input);
 
-		input = FixedAngle(FixedMul(AngleFixed(input), camspeed));
-		if (invert)
-			input = InvAngle(input);
+			input = FixedAngle(FixedMul(AngleFixed(input), camspeed));
+			if (invert)
+				input = InvAngle(input);
 
-		angle = thiscam->angle + input;
+			angle = thiscam->angle + input;
+		}
 	}
 
 	if (!resetcalled && (leveltime > starttime && timeover != 2)
@@ -8629,8 +8647,25 @@ boolean P_MoveChaseCamera(player_t *player, camera_t *thiscam, boolean resetcall
 	if (twodlevel || (mo->flags2 & MF2_TWOD) || (!camstill && !timeover)) // Keep the view still...
 	{
 		G_ClipAimingPitch((INT32 *)&angle);
-		dist = thiscam->aiming - angle;
-		thiscam->aiming -= (dist>>3);
+
+		if (camspeed == FRACUNIT)
+			thiscam->aiming = angle;
+		else
+		{
+			angle_t input;
+			boolean invert;
+
+			input = thiscam->aiming - angle;
+			invert = (input > ANGLE_180);
+			if (invert)
+				input = InvAngle(input);
+
+			input = FixedAngle(FixedMul(AngleFixed(input), (5*camspeed)/16));
+			if (invert)
+				input = InvAngle(input);
+
+			thiscam->aiming -= input;
+		}
 	}
 
 	if (!resetcalled && (player->playerstate == PST_DEAD || player->playerstate == PST_REBORN))
