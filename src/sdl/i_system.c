@@ -236,6 +236,11 @@ static INT32 joystick4_started = 0;
 */
 SDLJoyInfo_t JoyInfo4;
 
+SDL_Haptic *joyhaptic;
+SDL_Haptic *joyhaptic2;
+SDL_Haptic *joyhaptic3;
+SDL_Haptic *joyhaptic4;
+
 #ifdef HAVE_TERMIOS
 static INT32 fdmouse2 = -1;
 static INT32 mouse2_started = 0;
@@ -2160,6 +2165,7 @@ static int joy_open4(int joyindex)
 void I_InitJoystick(void)
 {
 	SDL_Joystick *newjoy = NULL;
+	Uint32 subsystem_mask = SDL_INIT_JOYSTICK|SDL_INIT_HAPTIC;
 
 	//I_ShutdownJoystick();
 	//SDL_SetHintWithPriority("SDL_XINPUT_ENABLED", "0", SDL_HINT_OVERRIDE);
@@ -2172,11 +2178,11 @@ void I_InitJoystick(void)
 	if (M_CheckParm("-nohidapi"))
 		SDL_SetHintWithPriority("SDL_JOYSTICK_HIDAPI", "0", SDL_HINT_OVERRIDE);
 
-	if (SDL_WasInit(SDL_INIT_JOYSTICK) == 0)
+	if (SDL_WasInit(subsystem_mask) == 0)
 	{
 		CONS_Printf("I_InitJoystick()...\n");
 
-		if (SDL_InitSubSystem(SDL_INIT_JOYSTICK) == -1)
+		if (SDL_InitSubSystem(subsystem_mask) == -1)
 		{
 			CONS_Printf(M_GetText("Couldn't initialize joystick: %s\n"), SDL_GetError());
 			return;
@@ -2205,21 +2211,40 @@ void I_InitJoystick(void)
 
 	if (JoyInfo.dev != newjoy && JoyInfo2.dev != newjoy && JoyInfo3.dev != newjoy && JoyInfo4.dev != newjoy)
 		SDL_JoystickClose(newjoy);
+
+	if (JoyInfo.dev != NULL)
+	{
+		//Get controller haptic device
+		joyhaptic = SDL_HapticOpenFromJoystick(JoyInfo.dev);
+		if(joyhaptic == NULL)
+		{
+			CONS_Alert(CONS_WARNING, "Controller does not support haptics: %s\n", SDL_GetError());
+		}
+		else
+		{
+			//Get initialize rumble
+			if (SDL_HapticRumbleInit(joyhaptic) < 0)
+			{
+				CONS_Alert(CONS_WARNING, "Unable to initialize rumble: %s\n", SDL_GetError());
+			}
+		}
+	}
 }
 
 void I_InitJoystick2(void)
 {
 	SDL_Joystick *newjoy = NULL;
+	Uint32 subsystem_mask = SDL_INIT_JOYSTICK|SDL_INIT_HAPTIC;
 
 	//I_ShutdownJoystick2();
 	//SDL_SetHintWithPriority("SDL_XINPUT_ENABLED", "0", SDL_HINT_OVERRIDE);
 	if (M_CheckParm("-nojoy"))
 		return;
 
-	if (SDL_WasInit(SDL_INIT_JOYSTICK) == 0)
+	if (SDL_WasInit(subsystem_mask) == 0)
 	{
 		CONS_Printf("I_InitJoystick2()...\n");
-		if (SDL_InitSubSystem(SDL_INIT_JOYSTICK) == -1)
+		if (SDL_InitSubSystem(subsystem_mask) == -1)
 		{
 			CONS_Printf(M_GetText("Couldn't initialize joystick: %s\n"), SDL_GetError());
 			return;
@@ -2248,21 +2273,40 @@ void I_InitJoystick2(void)
 
 	if (JoyInfo.dev != newjoy && JoyInfo2.dev != newjoy && JoyInfo3.dev != newjoy && JoyInfo4.dev != newjoy)
 		SDL_JoystickClose(newjoy);
+
+	if (JoyInfo2.dev != NULL)
+	{
+		//Get controller haptic device
+		joyhaptic2 = SDL_HapticOpenFromJoystick(JoyInfo2.dev);
+		if(joyhaptic2 == NULL)
+		{
+			CONS_Alert(CONS_WARNING, "Controller does not support haptics: %s\n", SDL_GetError());
+		}
+		else
+		{
+			//Get initialize rumble
+			if (SDL_HapticRumbleInit(joyhaptic2) < 0)
+			{
+				CONS_Alert(CONS_WARNING, "Unable to initialize rumble: %s\n", SDL_GetError());
+			}
+		}
+	}
 }
 
 void I_InitJoystick3(void)
 {
 	SDL_Joystick *newjoy = NULL;
+	Uint32 subsystem_mask = SDL_INIT_JOYSTICK|SDL_INIT_HAPTIC;
 
 	//I_ShutdownJoystick3();
 	//SDL_SetHintWithPriority("SDL_XINPUT_ENABLED", "0", SDL_HINT_OVERRIDE);
 	if (M_CheckParm("-nojoy"))
 		return;
 
-	if (SDL_WasInit(SDL_INIT_JOYSTICK) == 0)
+	if (SDL_WasInit(subsystem_mask) == 0)
 	{
 		CONS_Printf("I_InitJoystick3()...\n");
-		if (SDL_InitSubSystem(SDL_INIT_JOYSTICK) == -1)
+		if (SDL_InitSubSystem(subsystem_mask) == -1)
 		{
 			CONS_Printf(M_GetText("Couldn't initialize joystick: %s\n"), SDL_GetError());
 			return;
@@ -2291,21 +2335,40 @@ void I_InitJoystick3(void)
 
 	if (JoyInfo.dev != newjoy && JoyInfo2.dev != newjoy && JoyInfo3.dev != newjoy && JoyInfo4.dev != newjoy)
 		SDL_JoystickClose(newjoy);
+
+	if (JoyInfo3.dev != NULL)
+	{
+		//Get controller haptic device
+		joyhaptic3 = SDL_HapticOpenFromJoystick(JoyInfo3.dev);
+		if(joyhaptic3 == NULL)
+		{
+			CONS_Alert(CONS_WARNING, "Controller does not support haptics: %s\n", SDL_GetError());
+		}
+		else
+		{
+			//Get initialize rumble
+			if (SDL_HapticRumbleInit(joyhaptic3) < 0)
+			{
+				CONS_Alert(CONS_WARNING, "Unable to initialize rumble: %s\n", SDL_GetError());
+			}
+		}
+	}
 }
 
 void I_InitJoystick4(void)
 {
 	SDL_Joystick *newjoy = NULL;
+	Uint32 subsystem_mask = SDL_INIT_JOYSTICK|SDL_INIT_HAPTIC;
 
 	//I_ShutdownJoystick4();
 	//SDL_SetHintWithPriority("SDL_XINPUT_ENABLED", "0", SDL_HINT_OVERRIDE);
 	if (M_CheckParm("-nojoy"))
 		return;
 
-	if (SDL_WasInit(SDL_INIT_JOYSTICK) == 0)
+	if (SDL_WasInit(subsystem_mask) == 0)
 	{
 		CONS_Printf("I_InitJoystick4()...\n");
-		if (SDL_InitSubSystem(SDL_INIT_JOYSTICK) == -1)
+		if (SDL_InitSubSystem(subsystem_mask) == -1)
 		{
 			CONS_Printf(M_GetText("Couldn't initialize joystick: %s\n"), SDL_GetError());
 			return;
@@ -2334,10 +2397,30 @@ void I_InitJoystick4(void)
 
 	if (JoyInfo.dev != newjoy && JoyInfo2.dev != newjoy && JoyInfo3.dev != newjoy && JoyInfo4.dev != newjoy)
 		SDL_JoystickClose(newjoy);
+
+	if (JoyInfo4.dev != NULL)
+	{
+		//Get controller haptic device
+		joyhaptic4 = SDL_HapticOpenFromJoystick(JoyInfo4.dev);
+		if(joyhaptic4 == NULL)
+		{
+			CONS_Alert(CONS_WARNING, "Controller does not support haptics: %s\n", SDL_GetError());
+		}
+		else
+		{
+			//Get initialize rumble
+			if (SDL_HapticRumbleInit(joyhaptic4) < 0)
+			{
+				CONS_Alert(CONS_WARNING, "Unable to initialize rumble: %s\n", SDL_GetError());
+			}
+		}
+	}
 }
 
 static void I_ShutdownInput(void)
 {
+	Uint32 subsystem_mask = SDL_INIT_JOYSTICK|SDL_INIT_HAPTIC;
+
 	// Yes, the name is misleading: these send neutral events to
 	// clean up the unplugged joystick's input
 	// Note these methods are internal to this file, not called elsewhere.
@@ -2346,10 +2429,10 @@ static void I_ShutdownInput(void)
 	I_ShutdownJoystick3();
 	I_ShutdownJoystick4();
 
-	if (SDL_WasInit(SDL_INIT_JOYSTICK) == SDL_INIT_JOYSTICK)
+	if (SDL_WasInit(subsystem_mask) == subsystem_mask)
 	{
 		CONS_Printf("Shutting down joy system\n");
-		SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
+		SDL_QuitSubSystem(subsystem_mask);
 		I_OutputMsg("I_Joystick: SDL's Joystick system has been shutdown\n");
 	}
 }
@@ -2377,6 +2460,15 @@ const char *I_GetJoyName(INT32 joyindex)
 	}
 	return joyname;
 }
+
+void I_DoJoyRumble(void)
+{
+	if (SDL_HapticOpened(SDL_HapticIndex(joyhaptic)) && SDL_HapticRumbleSupported(joyhaptic))
+	{
+		SDL_HapticRumblePlay(joyhaptic, 0.5f, 1000);
+	}
+}
+
 
 #ifndef NOMUMBLE
 #ifdef HAVE_MUMBLE

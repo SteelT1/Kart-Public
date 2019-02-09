@@ -202,6 +202,8 @@ void I_InitJoystick4(void);
 */
 INT32 I_NumJoys(void);
 
+void I_DoJoyRumble(void);
+
 /**	\brief	The *I_GetJoyName function
 
 	\param	joyindex	which joystick
