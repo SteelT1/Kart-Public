@@ -194,6 +194,8 @@ static INT32 vidm_previousmode;
 static INT32 vidm_selected = 0;
 static INT32 vidm_nummodes;
 static INT32 vidm_column_size;
+static INT32 cursor_pos = 0; // position of cursor in line
+static INT32 cursor_sel = 0; // Number of selected characters
 
 //
 // PROTOTYPES
@@ -2328,6 +2330,80 @@ static boolean M_ChangeStringCvar(INT32 choice)
 	consvar_t *cv = (consvar_t *)currentMenu->menuitems[itemOn].itemaction;
 	char buf[MAXSTRINGLENGTH];
 	size_t len;
+	char selbuf[MAXSTRINGLENGTH];
+
+	if (ctrldown)
+	{
+		if (choice == 'X' || choice == 'x')
+		{
+			len = strlen(cv->string);
+			CONS_Printf("ctrl+x\n");
+		}
+		else if (choice == 'C' || choice == 'c') // c or uppercase c
+		{
+			CONS_Printf("ctrl+c\n");
+		}
+		else if (choice == 'V' || choice == 'v') // v or uppercase v
+		{
+			const char *paste = I_ClipboardPaste();
+			strcpy(buf, cv->string);
+            size_t full_len = strlen(buf) + strlen(paste); //The combined string length of buf and paste
+			if (full_len < MAXSTRINGLENGTH && paste != NULL)
+			{
+				CONS_Printf("%s\n", paste);
+				strcat(buf, paste);
+				CONS_Printf("%s\n", buf);
+				CONS_Printf("%d\n", full_len);
+				buf[full_len] = 0;
+				CV_Set(cv, buf);
+			}
+			CONS_Printf("ctrl+v\n");
+		}
+		return true;
+	}
+
+	if (shiftdown)
+	{
+		switch (choice)
+		{
+			case KEY_LEFTARROW:
+				len = strlen(buf);
+				if (len != 0)
+				{
+					M_Memcpy(buf, cv->string, len);
+					CONS_Printf("Selected left\n");
+					cursor_pos = cursor_sel -= 1;
+						if (cursor_sel <= 0)
+						{
+							cursor_sel = cursor_pos = 0;
+						}
+					CONS_Printf("Selection length: %d\n", cursor_sel);
+					strncat(selbuf, buf+cursor_pos, cursor_sel);
+					selbuf[strlen(selbuf)] = 0;
+					CONS_Printf("String is: %s\n", selbuf);
+				}
+				break;
+			case KEY_RIGHTARROW:
+				len = strlen(buf);
+				if (len != 0)
+				{
+					M_Memcpy(buf, cv->string, len);
+					CONS_Printf("Selected right\n");
+					CONS_Printf("Selection length: %d\n", cursor_sel);
+					cursor_pos = cursor_sel += 1;
+						if (cursor_sel > len)
+						{
+							cursor_sel = cursor_pos = strlen(buf);
+						}
+					strncat(selbuf, buf, cursor_sel);
+					selbuf[strlen(selbuf)] = 0;
+					CONS_Printf("String is: %s\n", selbuf);
+				}
+				break;
+			default:
+				break;
+		}
+	}
 
 	if (shiftdown && choice >= 32 && choice <= 127)
 		choice = shiftxform[choice];
@@ -2340,8 +2416,9 @@ static boolean M_ChangeStringCvar(INT32 choice)
 			{
 				S_StartSound(NULL,sfx_menu1); // Tails
 				M_Memcpy(buf, cv->string, len);
-				buf[len-1] = 0;
+				buf[cursor_pos] = 0;
 				CV_Set(cv, buf);
+				cursor_pos = strlen(buf);
 			}
 			return true;
 		case KEY_DEL:
@@ -2351,6 +2428,26 @@ static boolean M_ChangeStringCvar(INT32 choice)
 				CV_Set(cv, "");
 			}
 			return true;
+			break;
+		case KEY_LEFTARROW:
+			cursor_pos -= 1;
+				if (cursor_pos < 0)
+				{
+					cursor_pos = 0;
+					CONS_Printf("Fixed\n");
+					CONS_Printf("%d\n", cursor_pos);
+				}
+				return true;
+			break;
+		case KEY_RIGHTARROW:
+			cursor_pos += 1;
+			CONS_Printf("%d\n", cursor_pos);
+				if (cursor_pos > strlen(buf))
+				{
+					cursor_pos = strlen(buf);
+				}
+				return true;
+			break;
 		default:
 			if (choice >= 32 && choice <= 127)
 			{
@@ -2359,8 +2456,9 @@ static boolean M_ChangeStringCvar(INT32 choice)
 				{
 					S_StartSound(NULL,sfx_menu1); // Tails
 					M_Memcpy(buf, cv->string, len);
-					buf[len++] = (char)choice;
 					buf[len] = 0;
+					memmove(buf+cursor_pos+1, buf+cursor_pos, strlen(buf)-cursor_pos+1);
+					buf[cursor_pos] = choice;
 					CV_Set(cv, buf);
 				}
 				return true;
@@ -3558,9 +3656,9 @@ static void M_DrawGenericMenu(void)
 							case IT_CV_STRING:
 								M_DrawTextBox(x, y + 4, MAXSTRINGLENGTH, 1);
 								V_DrawString(x + 8, y + 12, V_ALLOWLOWERCASE, cv->string);
-								if (skullAnimCounter < 4 && i == itemOn)
-									V_DrawCharacter(x + 8 + V_StringWidth(cv->string, 0), y + 12,
-										'_' | 0x80, false);
+								if (skullAnimCounter < 6 && i == itemOn) // Draw blinking cursor
+									V_DrawCharacter(x + 8 + V_StringWidth("_", 0) * cursor_pos, y + 12,
+										'_' | V_GREENMAP, false);
 								y += 16;
 								break;
 							default:
