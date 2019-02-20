@@ -27,8 +27,8 @@
 : ${_DPL_PACKAGE_ASSET}         # Build asset installation package. Linux only.
 
 # Asset File Parameters
-: ${ASSET_ARCHIVE_PATH:=https://github.com/mazmazz/Kart-Public/releases/download/kart_assets/srb2kart-v102-assets.7z}
-: ${ASSET_ARCHIVE_OPTIONAL_PATH:=https://github.com/mazmazz/Kart-Public/releases/download/kart_assets/srb2kart-v102-optional-assets.7z}
+: ${ASSET_ARCHIVE_PATH:=https://lightdash.org/kart/assets/srb2kart-v103-assets.7z}
+: ${ASSET_ARCHIVE_OPTIONAL_PATH:=https://lightdash.org/kart/assets/srb2kart-v103-optional-assets.7z}
 : ${ASSET_FILES_HASHED:=srb2.srb patch.kart gfx.kart textures.kart chars.kart maps.kart}
 : ${ASSET_FILES_DOCS:=README.txt HISTORY.txt LICENSE.txt LICENSE-3RD-PARTY.txt}
 : ${ASSET_FILES_OPTIONAL_GET:=0}
