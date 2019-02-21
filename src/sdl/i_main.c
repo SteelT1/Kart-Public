@@ -103,6 +103,10 @@ static inline VOID MakeCodeWritable(VOID)
 
 	\return	int
 */
+#if defined (__GNUC__) && (__GNUC__ >= 4)
+#pragma GCC diagnostic ignored "-Wmissing-noreturn"
+#endif
+
 #ifdef FORCESDLMAIN
 int SDL_main(int argc, char **argv)
 #else
@@ -154,7 +158,7 @@ int main(int argc, char **argv)
 	MakeCodeWritable();
 #endif
 	// startup SRB2
-	CONS_Printf("Setting up SRB2...\n");
+	CONS_Printf("Setting up SRB2Kart...\n");
 	D_SRB2Main();
 	CONS_Printf("Entering main game loop...\n");
 	// never return

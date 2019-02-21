@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -68,6 +68,10 @@ extern fixed_t finetangent[FINEANGLES/2];
 #define ANGLE_337h 0xF0000000
 #define ANGLE_MAX  0xFFFFFFFF
 
+// SRB2kart
+#define ANGLE_120  0x53333333
+#define ANGLE_240  0xA6666666
+
 typedef UINT32 angle_t;
 
 // To get a global angle from Cartesian coordinates, the coordinates are
@@ -83,6 +87,8 @@ extern angle_t tantoangle[SLOPERANGE+1];
 
 // Utility function, called by R_PointToAngle.
 FUNCMATH unsigned SlopeDiv(unsigned num, unsigned den);
+// Only called by R_PointToAngleEx
+UINT64 SlopeDivEx(unsigned int num, unsigned int den);
 
 // 360 - angle_t(ANGLE_45) = ANGLE_315
 FUNCMATH FUNCINLINE static ATTRINLINE angle_t InvAngle(angle_t a)

@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -27,6 +27,7 @@
 #include "d_clisrv.h"
 #include "z_zone.h"
 #include "i_tcp.h"
+#include "d_main.h" // srb2home
 
 //
 // NETWORKING
@@ -49,7 +50,9 @@ doomcom_t *doomcom = NULL;
 /// \brief network packet data, points inside doomcom
 doomdata_t *netbuffer = NULL;
 
+#ifdef DEBUGFILE
 FILE *debugfile = NULL; // put some net info in a file during the game
+#endif
 
 #define MAXREBOUND 8
 static doomdata_t reboundstore[MAXREBOUND];
@@ -822,6 +825,10 @@ static const char *packettypename[NUMPACKETTYPE] =
 	"CLIENTMIS",
 	"CLIENT2CMD",
 	"CLIENT2MIS",
+	"CLIENT3CMD",
+	"CLIENT3MIS",
+	"CLIENT4CMD",
+	"CLIENT4MIS",
 	"NODEKEEPALIVE",
 	"NODEKEEPALIVEMIS",
 	"SERVERTICS",
@@ -845,6 +852,8 @@ static const char *packettypename[NUMPACKETTYPE] =
 	"FILEFRAGMENT",
 	"TEXTCMD",
 	"TEXTCMD2",
+	"TEXTCMD3",
+	"TEXTCMD4",
 	"CLIENTJOIN",
 	"NODETIMEOUT",
 	"RESYNCHING",
@@ -890,16 +899,25 @@ static void DebugPrintpacket(const char *header)
 		}
 		case PT_CLIENTCMD:
 		case PT_CLIENT2CMD:
+		case PT_CLIENT3CMD:
+		case PT_CLIENT4CMD:
 		case PT_CLIENTMIS:
 		case PT_CLIENT2MIS:
+		case PT_CLIENT3MIS:
+		case PT_CLIENT4MIS:
 		case PT_NODEKEEPALIVE:
 		case PT_NODEKEEPALIVEMIS:
 			fprintf(debugfile, "    tic %4u resendfrom %u\n",
 				(UINT32)ExpandTics(netbuffer->u.clientpak.client_tic),
 				(UINT32)ExpandTics (netbuffer->u.clientpak.resendfrom));
 			break;
+		case PT_BASICKEEPALIVE:
+			fprintf(debugfile, "    keep alive\n");
+			break;
 		case PT_TEXTCMD:
 		case PT_TEXTCMD2:
+		case PT_TEXTCMD3:
+		case PT_TEXTCMD4:
 			fprintf(debugfile, "    length %d\n    ", netbuffer->u.textcmd[0]);
 			fprintf(debugfile, "[%s]", netxcmdnames[netbuffer->u.textcmd[1] - 1]);
 			fprintfstringnewline((char *)netbuffer->u.textcmd + 2, netbuffer->u.textcmd[0] - 1);
@@ -1380,12 +1398,12 @@ boolean D_CheckNetGame(void)
 		{
 			k++;
 			sprintf(filename, "debug%d.txt", k);
-			debugfile = fopen(filename, "w");
+			debugfile = fopen(va("%s" PATHSEP "%s", srb2home, filename), "w");
 		}
 		if (debugfile)
-			CONS_Printf(M_GetText("debug output to: %s\n"), filename);
+			CONS_Printf(M_GetText("debug output to: %s\n"), va("%s" PATHSEP "%s", srb2home, filename));
 		else
-			CONS_Alert(CONS_WARNING, M_GetText("cannot debug output to file %s!\n"), filename);
+			CONS_Alert(CONS_WARNING, M_GetText("cannot debug output to file %s!\n"), va("%s" PATHSEP "%s", srb2home, filename));
 	}
 #endif
 #endif

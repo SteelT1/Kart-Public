@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -107,8 +107,8 @@ typedef enum
 	MF_NOSECTOR         = 1<<3,
 	// Don't use the blocklinks (inert but displayable)
 	MF_NOBLOCKMAP       = 1<<4,
-	// Not to be activated by sound, deaf monster.
-	MF_AMBUSH           = 1<<5,
+	// Thin, paper-like collision bound (for visual equivalent, see FF_PAPERSPRITE)
+	MF_PAPERCOLLISION            = 1<<5,
 	// You can push this object. It can activate switches and things by pushing it on top.
 	MF_PUSHABLE         = 1<<6,
 	// Object is a boss.
@@ -160,7 +160,9 @@ typedef enum
 	MF_GRENADEBOUNCE    = 1<<28,
 	// Run the action thinker on spawn.
 	MF_RUNSPAWNFUNC     = 1<<29,
-	// free: 1<<30 and 1<<31
+	// Don't remap in Encore mode.
+	MF_DONTENCOREMAP    = 1<<30,
+	// free: 1<<31
 } mobjflag_t;
 
 typedef enum
@@ -193,6 +195,7 @@ typedef enum
 	MF2_BOSSNOTRAP     = 1<<25, // No Egg Trap after boss
 	MF2_BOSSFLEE       = 1<<26, // Boss is fleeing!
 	MF2_BOSSDEAD       = 1<<27, // Boss is dead! (Not necessarily fleeing, if a fleeing point doesn't exist.)
+	MF2_AMBUSH         = 1<<28, // Alternate behaviour typically set by MTF_AMBUSH
 	// free: to and including 1<<31
 } mobjflag2_t;
 
@@ -232,11 +235,17 @@ typedef enum
 	MFE_VERTICALFLIP      = 1<<5,
 	// Goo water
 	MFE_GOOWATER          = 1<<6,
-	// free: to and including 1<<7
+	// SRB2Kart: The mobj just hit & bounced off a wall, this is cleared on next frame
+	MFE_JUSTBOUNCEDWALL   = 1<<7,
 	// Mobj was already sprung this tic
 	MFE_SPRUNG            = 1<<8,
 	// Platform movement
 	MFE_APPLYPMOMZ        = 1<<9,
+	// SRB2Kart: Splitscreen sprite display; very wasteful but I couldn't think of another way to do it...
+	MFE_DRAWONLYFORP1     = 1<<10,
+	MFE_DRAWONLYFORP2     = 1<<11,
+	MFE_DRAWONLYFORP3     = 1<<12,
+	MFE_DRAWONLYFORP4     = 1<<13,
 	// free: to and including 1<<15
 } mobjeflag_t;
 
@@ -252,6 +261,10 @@ typedef enum {
 	PCF_FOF = 4,
 	// Above MOVING FOF (this means we need to keep floorz up to date...)
 	PCF_MOVINGFOF = 8,
+	// Is rain.
+	PCF_RAIN = 16,
+	// Ran the thinker this tic.
+	PCF_THUNK = 32,
 } precipflag_t;
 // Map Object definition.
 typedef struct mobj_s
@@ -359,6 +372,8 @@ typedef struct mobj_s
 	struct pslope_s *standingslope; // The slope that the object is standing on (shouldn't need synced in savegames, right?)
 #endif
 
+	boolean colorized; // Whether the mobj uses the rainbow colormap
+
 	// WARNING: New fields must be added separately to savegame and Lua.
 } mobj_t;
 
@@ -418,6 +433,8 @@ typedef struct actioncache_s
 
 extern actioncache_t actioncachehead;
 
+extern mobj_t *waypointcap;
+
 void P_InitCachedActions(void);
 void P_RunCachedActions(void);
 void P_AddCachedAction(mobj_t *mobj, INT32 statenum);
@@ -441,7 +458,7 @@ boolean P_SupermanLook4Players(mobj_t *actor);
 void P_DestroyRobots(void);
 void P_SnowThinker(precipmobj_t *mobj);
 void P_RainThinker(precipmobj_t *mobj);
-FUNCMATH void P_NullPrecipThinker(precipmobj_t *mobj);
+void P_NullPrecipThinker(precipmobj_t *mobj);
 void P_RemovePrecipMobj(precipmobj_t *mobj);
 void P_SetScale(mobj_t *mobj, fixed_t newscale);
 void P_XYMovement(mobj_t *mo);

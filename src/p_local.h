@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -25,7 +25,7 @@
 
 #define FLOATSPEED (FRACUNIT*4)
 
-#define VIEWHEIGHTS "41"
+//#define VIEWHEIGHTS "41"
 
 // Maximum player score.
 #define MAXSCORE 999999990
@@ -40,9 +40,6 @@
 
 // Convenience macro to fix issue with collision along bottom/left edges of blockmap -Red
 #define BMBOUNDFIX(xl, xh, yl, yh) {if (xl > xh) xl = 0; if (yl > yh) yl = 0;}
-
-// player radius used only in am_map.c
-#define PLAYERRADIUS (16*FRACUNIT)
 
 // MAXRADIUS is for precalculated sector block boxes
 // the spider demon is larger,
@@ -68,7 +65,6 @@
 
 // both the head and tail of the thinker list
 extern thinker_t thinkercap;
-extern INT32 runcount;
 
 void P_InitThinkers(void);
 void P_AddThinker(thinker_t *thinker);
@@ -107,21 +103,31 @@ typedef struct camera_s
 
 	// Momentums, used to update position.
 	fixed_t momx, momy, momz;
+
+	// SRB2Kart: camera pans while drifting
+	fixed_t pan;
 } camera_t;
 
-extern camera_t camera, camera2;
+extern camera_t camera, camera2, camera3, camera4;
 extern consvar_t cv_cam_dist, cv_cam_still, cv_cam_height;
 extern consvar_t cv_cam_speed, cv_cam_rotate, cv_cam_rotspeed;
 
 extern consvar_t cv_cam2_dist, cv_cam2_still, cv_cam2_height;
 extern consvar_t cv_cam2_speed, cv_cam2_rotate, cv_cam2_rotspeed;
 
+extern consvar_t cv_cam3_dist, cv_cam3_still, cv_cam3_height;
+extern consvar_t cv_cam3_speed, cv_cam3_rotate, cv_cam3_rotspeed;
+
+extern consvar_t cv_cam4_dist, cv_cam4_still, cv_cam4_height;
+extern consvar_t cv_cam4_speed, cv_cam4_rotate, cv_cam4_rotspeed;
+
 extern fixed_t t_cam_dist, t_cam_height, t_cam_rotate;
 extern fixed_t t_cam2_dist, t_cam2_height, t_cam2_rotate;
+extern fixed_t t_cam3_dist, t_cam3_height, t_cam3_rotate;
+extern fixed_t t_cam4_dist, t_cam4_height, t_cam4_rotate;
 
 fixed_t P_GetPlayerHeight(player_t *player);
 fixed_t P_GetPlayerSpinHeight(player_t *player);
-INT32 P_GetPlayerControlDirection(player_t *player);
 void P_AddPlayerScore(player_t *player, UINT32 amount);
 void P_ResetCamera(player_t *player, camera_t *thiscam);
 boolean P_TryCameraMove(fixed_t x, fixed_t y, camera_t *thiscam);
@@ -131,15 +137,18 @@ boolean P_PlayerInPain(player_t *player);
 void P_DoPlayerPain(player_t *player, mobj_t *source, mobj_t *inflictor);
 void P_ResetPlayer(player_t *player);
 boolean P_IsLocalPlayer(player_t *player);
+boolean P_SpectatorJoinGame(player_t *player);
 
 boolean P_IsObjectInGoop(mobj_t *mo);
 boolean P_IsObjectOnGround(mobj_t *mo);
 boolean P_IsObjectOnGroundIn(mobj_t *mo, sector_t *sec);
+boolean P_IsObjectOnRealGround(mobj_t *mo, sector_t *sec); // SRB2Kart
 boolean P_InSpaceSector(mobj_t *mo);
 boolean P_InQuicksand(mobj_t *mo);
 
 void P_SetObjectMomZ(mobj_t *mo, fixed_t value, boolean relative);
 void P_RestoreMusic(player_t *player);
+boolean P_EndingMusic(player_t *player);
 void P_SpawnShieldOrb(player_t *player);
 mobj_t *P_SpawnGhostMobj(mobj_t *mobj);
 void P_GivePlayerRings(player_t *player, INT32 num_rings);
@@ -153,11 +162,12 @@ void P_DoJumpShield(player_t *player);
 void P_BlackOw(player_t *player);
 void P_ElementalFireTrail(player_t *player);
 
-void P_DoPityCheck(player_t *player);
+//void P_DoPityCheck(player_t *player);
 void P_PlayerThink(player_t *player);
 void P_PlayerAfterThink(player_t *player);
 void P_DoPlayerExit(player_t *player);
-void P_NightserizePlayer(player_t *player, INT32 ptime);
+void P_DoTimeOver(player_t *player);
+//void P_NightserizePlayer(player_t *player, INT32 ptime);
 
 void P_InstaThrust(mobj_t *mo, angle_t angle, fixed_t move);
 fixed_t P_ReturnThrustX(mobj_t *mo, angle_t angle, fixed_t move);
@@ -167,22 +177,24 @@ void P_InstaThrustEvenIn2D(mobj_t *mo, angle_t angle, fixed_t move);
 boolean P_LookForEnemies(player_t *player);
 void P_NukeEnemies(mobj_t *inflictor, mobj_t *source, fixed_t radius);
 void P_HomingAttack(mobj_t *source, mobj_t *enemy); /// \todo doesn't belong in p_user
-boolean P_SuperReady(player_t *player);
+//boolean P_SuperReady(player_t *player);
 void P_DoJump(player_t *player, boolean soundandstate);
 boolean P_AnalogMove(player_t *player);
-boolean P_TransferToNextMare(player_t *player);
-UINT8 P_FindLowestMare(void);
+/*boolean P_TransferToNextMare(player_t *player);
+UINT8 P_FindLowestMare(void);*/
+UINT8 P_FindLowestLap(void);
+UINT8 P_FindHighestLap(void);
 void P_FindEmerald(void);
-void P_TransferToAxis(player_t *player, INT32 axisnum);
+//void P_TransferToAxis(player_t *player, INT32 axisnum);
 boolean P_PlayerMoving(INT32 pnum);
 void P_SpawnThokMobj(player_t *player);
 void P_SpawnSpinMobj(player_t *player, mobjtype_t type);
 void P_Telekinesis(player_t *player, fixed_t thrust, fixed_t range);
 
 void P_PlayLivesJingle(player_t *player);
-#define P_PlayRinglossSound(s)	S_StartSound(s, (mariomode) ? sfx_mario8 : sfx_altow1 + P_RandomKey(4));
-#define P_PlayDeathSound(s)		S_StartSound(s, sfx_altdi1 + P_RandomKey(4));
-#define P_PlayVictorySound(s)	S_StartSound(s, sfx_victr1 + P_RandomKey(4));
+void P_PlayRinglossSound(mobj_t *source);
+void P_PlayDeathSound(mobj_t *source);
+void P_PlayVictorySound(mobj_t *source);
 
 
 //
@@ -198,11 +210,13 @@ void P_PlayLivesJingle(player_t *player);
 extern mapthing_t *itemrespawnque[ITEMQUESIZE];
 extern tic_t itemrespawntime[ITEMQUESIZE];
 extern size_t iquehead, iquetail;
-extern consvar_t cv_gravity, cv_viewheight;
+extern consvar_t cv_gravity/*, cv_viewheight*/;
 
 void P_RespawnSpecials(void);
 
 mobj_t *P_SpawnMobj(fixed_t x, fixed_t y, fixed_t z, mobjtype_t type);
+
+mobj_t *P_SpawnShadowMobj(mobj_t * caster);
 
 void P_RecalcPrecipInSector(sector_t *sector);
 void P_PrecipitationEffects(void);
@@ -212,8 +226,9 @@ boolean P_MobjWasRemoved(mobj_t *th);
 void P_RemoveSavegameMobj(mobj_t *th);
 boolean P_SetPlayerMobjState(mobj_t *mobj, statenum_t state);
 boolean P_SetMobjState(mobj_t *mobj, statenum_t state);
-void P_RunShields(void);
+//void P_RunShields(void);
 void P_RunOverlays(void);
+void P_RunShadows(void);
 void P_MobjThinker(mobj_t *mobj);
 boolean P_RailThinker(mobj_t *mobj);
 void P_PushableThinker(mobj_t *mobj);
@@ -323,7 +338,8 @@ boolean P_CheckCameraPosition(fixed_t x, fixed_t y, camera_t *thiscam);
 boolean P_TryMove(mobj_t *thing, fixed_t x, fixed_t y, boolean allowdropoff);
 boolean P_Move(mobj_t *actor, fixed_t speed);
 boolean P_TeleportMove(mobj_t *thing, fixed_t x, fixed_t y, fixed_t z);
-void P_SlideMove(mobj_t *mo);
+void P_SlideMove(mobj_t *mo, boolean forceslide);
+void P_BouncePlayerMove(mobj_t *mo);
 void P_BounceMove(mobj_t *mo);
 boolean P_CheckSight(mobj_t *t1, mobj_t *t2);
 void P_CheckHoopPosition(mobj_t *hoopthing, fixed_t x, fixed_t y, fixed_t z, fixed_t radius);
@@ -385,13 +401,10 @@ void P_TouchSpecialThing(mobj_t *special, mobj_t *toucher, boolean heightcheck);
 void P_PlayerFlagBurst(player_t *player, boolean toss);
 void P_CheckTimeLimit(void);
 void P_CheckPointLimit(void);
-void P_CheckSurvivors(void);
+//void P_CheckSurvivors(void);
 boolean P_CheckRacers(void);
 
-void P_ClearStarPost(INT32 postnum);
-void P_ResetStarposts(void);
-
-boolean P_CanPickupItem(player_t *player, boolean weapon);
+boolean P_CanPickupItem(player_t *player, UINT8 weapon);
 void P_DoNightsScore(player_t *player);
 
 //
@@ -403,7 +416,7 @@ extern INT32 ceilmovesound;
 
 // Factor to scale scrolling effect into mobj-carrying properties = 3/32.
 // (This is so scrolling floors and objects on them can move at same speed.)
-#define CARRYFACTOR ((3*FRACUNIT)/32)
+#define CARRYFACTOR (FRACUNIT-ORIG_FRICTION)
 
 void P_MixUp(mobj_t *thing, fixed_t x, fixed_t y, fixed_t z, angle_t angle,
 			INT16 starpostx, INT16 starposty, INT16 starpostz,

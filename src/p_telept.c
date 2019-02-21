@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -67,13 +67,18 @@ void P_MixUp(mobj_t *thing, fixed_t x, fixed_t y, fixed_t z, angle_t angle,
 			localangle = angle;
 		if (thing == players[secondarydisplayplayer].mo)
 			localangle2 = angle;
+		if (thing == players[thirddisplayplayer].mo)
+			localangle3 = angle;
+		if (thing == players[fourthdisplayplayer].mo)
+			localangle4 = angle;
 
 		// move chasecam at new player location
-		if (splitscreen && camera2.chase
-			&& thing->player == &players[secondarydisplayplayer])
-		{
+		if (splitscreen > 2 && camera4.chase && thing->player == &players[fourthdisplayplayer])
+			P_ResetCamera(thing->player, &camera4);
+		else if (splitscreen > 1 && camera3.chase && thing->player == &players[thirddisplayplayer])
+			P_ResetCamera(thing->player, &camera3);
+		else if (splitscreen && camera2.chase && thing->player == &players[secondarydisplayplayer])
 			P_ResetCamera(thing->player, &camera2);
-		}
 		else if (camera.chase && thing->player == &players[displayplayer])
 			P_ResetCamera(thing->player, &camera);
 
@@ -91,12 +96,8 @@ void P_MixUp(mobj_t *thing, fixed_t x, fixed_t y, fixed_t z, angle_t angle,
 		thing->player->starpostangle = starpostangle;
 		thing->player->starpostnum = starpostnum;
 
-		// Reset map starposts for the player's new info.
-		P_ResetStarposts();
-		P_ClearStarPost(starpostnum);
-
 		P_ResetPlayer(thing->player);
-		P_SetPlayerMobjState(thing, S_PLAY_STND);
+		P_SetPlayerMobjState(thing, S_KART_STND1); // SRB2kart - was S_PLAY_STND
 
 		P_FlashPal(thing->player, PAL_MIXUP, 10);
 	}
@@ -147,9 +148,17 @@ boolean P_Teleport(mobj_t *thing, fixed_t x, fixed_t y, fixed_t z, angle_t angle
 			localangle = angle;
 		if (thing->player == &players[secondarydisplayplayer])
 			localangle2 = angle;
+		if (thing->player == &players[thirddisplayplayer])
+			localangle3 = angle;
+		if (thing->player == &players[fourthdisplayplayer])
+			localangle4 = angle;
 
 		// move chasecam at new player location
-		if (splitscreen && camera2.chase && thing->player == &players[secondarydisplayplayer])
+		if (splitscreen > 2 && camera4.chase && thing->player == &players[fourthdisplayplayer])
+			P_ResetCamera(thing->player, &camera4);
+		else if (splitscreen > 1 && camera3.chase && thing->player == &players[thirddisplayplayer])
+			P_ResetCamera(thing->player, &camera3);
+		else if (splitscreen && camera2.chase && thing->player == &players[secondarydisplayplayer])
 			P_ResetCamera(thing->player, &camera2);
 		else if (camera.chase && thing->player == &players[displayplayer])
 			P_ResetCamera(thing->player, &camera);
@@ -169,7 +178,7 @@ boolean P_Teleport(mobj_t *thing, fixed_t x, fixed_t y, fixed_t z, angle_t angle
 			thing->player->rmomx = thing->player->rmomy = 0;
 			thing->player->speed = 0;
 			P_ResetPlayer(thing->player);
-			P_SetPlayerMobjState(thing, S_PLAY_STND);
+			P_SetPlayerMobjState(thing, S_KART_STND1); // SRB2kart - was S_PLAY_STND
 		}
 
 		if (flash)

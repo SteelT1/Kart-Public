@@ -1,7 +1,7 @@
 // SONIC ROBO BLAST 2
 //-----------------------------------------------------------------------------
 // Copyright (C) 2012-2016 by John "JTE" Muniz.
-// Copyright (C) 2012-2016 by Sonic Team Junior.
+// Copyright (C) 2012-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -21,6 +21,7 @@
 #include "lua_script.h"
 #include "lua_libs.h"
 #include "lua_hud.h" // hud_running errors
+#include "lua_hook.h"	// hook_cmd_running
 
 static int lib_iteratePlayers(lua_State *L)
 {
@@ -112,10 +113,10 @@ static int player_get(lua_State *L)
 		lua_pushfixed(L, plr->viewz);
 	else if (fastcmp(field,"viewheight"))
 		lua_pushfixed(L, plr->viewheight);
-	else if (fastcmp(field,"deltaviewheight"))
+	/*else if (fastcmp(field,"deltaviewheight"))
 		lua_pushfixed(L, plr->deltaviewheight);
 	else if (fastcmp(field,"bob"))
-		lua_pushfixed(L, plr->bob);
+		lua_pushfixed(L, plr->bob);*/
 	else if (fastcmp(field,"aiming"))
 		lua_pushangle(L, plr->aiming);
 	else if (fastcmp(field,"health"))
@@ -128,6 +129,10 @@ static int player_get(lua_State *L)
 		lua_pushinteger(L, plr->ringweapons);
 	else if (fastcmp(field,"powers"))
 		LUA_PushUserdata(L, plr->powers, META_POWERS);
+	else if (fastcmp(field,"kartstuff"))
+		LUA_PushUserdata(L, plr->kartstuff, META_KARTSTUFF);
+	else if (fastcmp(field,"frameangle"))
+		lua_pushangle(L, plr->frameangle);
 	else if (fastcmp(field,"pflags"))
 		lua_pushinteger(L, plr->pflags);
 	else if (fastcmp(field,"panim"))
@@ -144,6 +149,12 @@ static int player_get(lua_State *L)
 		lua_pushfixed(L, plr->dashspeed);
 	else if (fastcmp(field,"dashtime"))
 		lua_pushinteger(L, plr->dashtime);
+	// SRB2kart
+	else if (fastcmp(field,"kartspeed"))
+		lua_pushinteger(L, plr->kartspeed);
+	else if (fastcmp(field,"kartweight"))
+		lua_pushinteger(L, plr->kartweight);
+	//
 	else if (fastcmp(field,"normalspeed"))
 		lua_pushfixed(L, plr->normalspeed);
 	else if (fastcmp(field,"runspeed"))
@@ -346,6 +357,9 @@ static int player_set(lua_State *L)
 	if (hud_running)
 		return luaL_error(L, "Do not alter player_t in HUD rendering code!");
 
+	if (hook_cmd_running)
+		return luaL_error(L, "Do not alter player_t in BuildCMD code!");
+
 	if (fastcmp(field,"mo")) {
 		mobj_t *newmo = *((mobj_t **)luaL_checkudata(L, 3, META_MOBJ));
 		plr->mo->player = NULL; // remove player pointer from old mobj
@@ -359,16 +373,20 @@ static int player_set(lua_State *L)
 		plr->viewz = luaL_checkfixed(L, 3);
 	else if (fastcmp(field,"viewheight"))
 		plr->viewheight = luaL_checkfixed(L, 3);
-	else if (fastcmp(field,"deltaviewheight"))
+	/*else if (fastcmp(field,"deltaviewheight"))
 		plr->deltaviewheight = luaL_checkfixed(L, 3);
 	else if (fastcmp(field,"bob"))
-		plr->bob = luaL_checkfixed(L, 3);
+		plr->bob = luaL_checkfixed(L, 3);*/
 	else if (fastcmp(field,"aiming")) {
 		plr->aiming = luaL_checkangle(L, 3);
 		if (plr == &players[consoleplayer])
 			localaiming = plr->aiming;
 		else if (plr == &players[secondarydisplayplayer])
 			localaiming2 = plr->aiming;
+		else if (plr == &players[thirddisplayplayer])
+			localaiming3 = plr->aiming;
+		else if (plr == &players[fourthdisplayplayer])
+			localaiming4 = plr->aiming;
 	}
 	else if (fastcmp(field,"health"))
 		plr->health = (INT32)luaL_checkinteger(L, 3);
@@ -401,6 +419,16 @@ static int player_set(lua_State *L)
 		plr->dashspeed = luaL_checkfixed(L, 3);
 	else if (fastcmp(field,"dashtime"))
 		plr->dashtime = (INT32)luaL_checkinteger(L, 3);
+	// SRB2kart
+	else if (fastcmp(field,"kartstuff"))
+		return NOSET;
+	else if (fastcmp(field,"frameangle"))
+		plr->frameangle = luaL_checkangle(L, 3);
+	else if (fastcmp(field,"kartspeed"))
+		plr->kartspeed = (UINT8)luaL_checkinteger(L, 3);
+	else if (fastcmp(field,"kartweight"))
+		plr->kartweight = (UINT8)luaL_checkinteger(L, 3);
+	//
 	else if (fastcmp(field,"normalspeed"))
 		plr->normalspeed = luaL_checkfixed(L, 3);
 	else if (fastcmp(field,"runspeed"))
@@ -643,6 +671,8 @@ static int power_set(lua_State *L)
 		return luaL_error(L, LUA_QL("powertype_t") " cannot be %u", p);
 	if (hud_running)
 		return luaL_error(L, "Do not alter player_t in HUD rendering code!");
+	if (hook_cmd_running)
+		return luaL_error(L, "Do not alter player_t in BuildCMD code!");
 	powers[p] = i;
 	return 0;
 }
@@ -651,6 +681,40 @@ static int power_set(lua_State *L)
 static int power_len(lua_State *L)
 {
 	lua_pushinteger(L, NUMPOWERS);
+	return 1;
+}
+
+// kartstuff, ks -> kartstuff[ks]
+static int kartstuff_get(lua_State *L)
+{
+	INT32 *kartstuff = *((INT32 **)luaL_checkudata(L, 1, META_KARTSTUFF));
+	kartstufftype_t ks = luaL_checkinteger(L, 2);
+	if (ks >= NUMKARTSTUFF)
+		return luaL_error(L, LUA_QL("kartstufftype_t") " cannot be %u", ks);
+	lua_pushinteger(L, kartstuff[ks]);
+	return 1;
+}
+
+// kartstuff, ks, value -> kartstuff[ks] = value
+static int kartstuff_set(lua_State *L)
+{
+	INT32 *kartstuff = *((INT32 **)luaL_checkudata(L, 1, META_KARTSTUFF));
+	kartstufftype_t ks = luaL_checkinteger(L, 2);
+	INT32 i = (INT32)luaL_checkinteger(L, 3);
+	if (ks >= NUMKARTSTUFF)
+		return luaL_error(L, LUA_QL("kartstufftype_t") " cannot be %u", ks);
+	if (hud_running)
+		return luaL_error(L, "Do not alter player_t in HUD rendering code!");
+	if (hook_cmd_running)
+		return luaL_error(L, "Do not alter player_t in BuildCMD code!");
+	kartstuff[ks] = i;
+	return 0;
+}
+
+// #kartstuff -> NUMKARTSTUFF
+static int kartstuff_len(lua_State *L)
+{
+	lua_pushinteger(L, NUMKARTSTUFF);
 	return 1;
 }
 
@@ -673,6 +737,8 @@ static int ticcmd_get(lua_State *L)
 		lua_pushinteger(L, cmd->aiming);
 	else if (fastcmp(field,"buttons"))
 		lua_pushinteger(L, cmd->buttons);
+	else if (fastcmp(field,"driftturn"))
+		lua_pushinteger(L, cmd->driftturn);
 	else
 		return NOFIELD;
 
@@ -699,6 +765,8 @@ static int ticcmd_set(lua_State *L)
 		cmd->aiming = (INT16)luaL_checkinteger(L, 3);
 	else if (fastcmp(field,"buttons"))
 		cmd->buttons = (UINT16)luaL_checkinteger(L, 3);
+	else if (fastcmp(field,"driftturn"))
+		cmd->driftturn = (INT16)luaL_checkinteger(L, 3);
 	else
 		return NOFIELD;
 
@@ -728,6 +796,17 @@ int LUA_PlayerLib(lua_State *L)
 		lua_setfield(L, -2, "__newindex");
 
 		lua_pushcfunction(L, power_len);
+		lua_setfield(L, -2, "__len");
+	lua_pop(L,1);
+
+	luaL_newmetatable(L, META_KARTSTUFF);
+		lua_pushcfunction(L, kartstuff_get);
+		lua_setfield(L, -2, "__index");
+
+		lua_pushcfunction(L, kartstuff_set);
+		lua_setfield(L, -2, "__newindex");
+
+		lua_pushcfunction(L, kartstuff_len);
 		lua_setfield(L, -2, "__len");
 	lua_pop(L,1);
 

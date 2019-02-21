@@ -3,7 +3,7 @@
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
 // Copyright (C) 2013-2016 by Matthew "Inuyasha" Walsh.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -26,6 +26,7 @@
 #include "console.h"
 #include "d_main.h"
 #include "m_misc.h" // movie mode
+#include "d_clisrv.h" // So the network state can be updated during the wipe
 
 #ifdef HWRENDER
 #include "hardware/hw_main.h"
@@ -46,24 +47,26 @@ UINT8 wipedefs[NUMWIPEDEFS] = {
 	99, // wipe_credits_intermediate (0)
 
 	0,  // wipe_level_toblack
-	UINT8_MAX,  // wipe_intermission_toblack
-	UINT8_MAX,  // wipe_continuing_toblack
-	0,  // wipe_titlescreen_toblack
+	UINT8_MAX, // wipe_intermission_toblack
+	0,  // wipe_voting_toblack,
+	UINT8_MAX, // wipe_continuing_toblack
+	3,  // wipe_titlescreen_toblack
 	0,  // wipe_timeattack_toblack
 	99, // wipe_credits_toblack
 	0,  // wipe_evaluation_toblack
 	0,  // wipe_gameend_toblack
-	99, // wipe_intro_toblack (hardcoded)
-	99, // wipe_cutscene_toblack (hardcoded)
+	UINT8_MAX, // wipe_intro_toblack (hardcoded)
+	UINT8_MAX, // wipe_cutscene_toblack (hardcoded)
 
-	0,  // wipe_specinter_toblack
-	0,  // wipe_multinter_toblack
-	0,  // wipe_speclevel_towhite
+	UINT8_MAX, // wipe_specinter_toblack
+	UINT8_MAX, // wipe_multinter_toblack
+	99, // wipe_speclevel_towhite
 
-	0,  // wipe_level_final
+	3,  // wipe_level_final
 	0,  // wipe_intermission_final
+	0,  // wipe_voting_final
 	0,  // wipe_continuing_final
-	0,  // wipe_titlescreen_final
+	3,  // wipe_titlescreen_final
 	0,  // wipe_timeattack_final
 	99, // wipe_credits_final
 	0,  // wipe_evaluation_final
@@ -94,7 +97,7 @@ static fixed_t paldiv;
   * \return	fademask_t for lump
   */
 static fademask_t *F_GetFadeMask(UINT8 masknum, UINT8 scrnnum) {
-	static char lumpname[10] = "FADEmmss";
+	static char lumpname[9] = "FADEmmss";
 	static fademask_t fm = {NULL,0,0,0,0,0};
 	lumpnum_t lumpnum;
 	UINT8 *lump, *mask;
@@ -104,7 +107,14 @@ static fademask_t *F_GetFadeMask(UINT8 masknum, UINT8 scrnnum) {
 	if (masknum > 99 || scrnnum > 99)
 		goto freemask;
 
-	sprintf(&lumpname[4], "%.2hu%.2hu", (UINT16)masknum, (UINT16)scrnnum);
+	// SRB2Kart: This suddenly triggers ERRORMODE now
+	//sprintf(&lumpname[4], "%.2hu%.2hu", (UINT16)masknum, (UINT16)scrnnum);
+
+	lumpname[4] = '0'+(masknum/10);
+	lumpname[5] = '0'+(masknum%10);
+
+	lumpname[6] = '0'+(scrnnum/10);
+	lumpname[7] = '0'+(scrnnum%10);
 
 	lumpnum = W_CheckNumForName(lumpname);
 	if (lumpnum == LUMPERROR)
@@ -373,6 +383,8 @@ void F_RunWipe(UINT8 wipetype, boolean drawMenu)
 
 		if (moviemode)
 			M_SaveFrame();
+
+		NetKeepAlive(); // Update the network so we don't cause timeouts
 	}
 	WipeInAction = false;
 #endif

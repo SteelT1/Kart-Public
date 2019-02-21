@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -25,6 +25,7 @@
 #include "w_wad.h"
 #include "z_zone.h"
 #include "console.h" // Until buffering gets finished
+#include "k_kart.h" // SRB2kart
 
 #ifdef HWRENDER
 #include "hardware/hw_main.h"
@@ -49,6 +50,14 @@ UINT8 *ylookup1[MAXVIDHEIGHT*4];
 /**	\brief pointer to the start of each line of the screen, for view2 (splitscreen)
 */
 UINT8 *ylookup2[MAXVIDHEIGHT*4];
+
+/**	\brief pointer to the start of each line of the screen, for view3 (splitscreen)
+*/
+UINT8 *ylookup3[MAXVIDHEIGHT*4];
+
+/**	\brief pointer to the start of each line of the screen, for view4 (splitscreen)
+*/
+UINT8 *ylookup4[MAXVIDHEIGHT*4];
 
 /**	\brief  x byte offset for columns inside the viewwindow,
 	so the first column starts at (SCRWIDTH - VIEWWIDTH)/2
@@ -126,15 +135,19 @@ UINT32 nflatxshift, nflatyshift, nflatshiftup, nflatmask;
 #define BOSS_TT_CACHE_INDEX (MAXSKINS + 1)
 #define METALSONIC_TT_CACHE_INDEX (MAXSKINS + 2)
 #define ALLWHITE_TT_CACHE_INDEX (MAXSKINS + 3)
+#define RAINBOW_TT_CACHE_INDEX (MAXSKINS + 4)
+#define BLINK_TT_CACHE_INDEX (MAXSKINS + 5)
+#define TT_CACHE_SIZE (MAXSKINS + 6)
 #define SKIN_RAMP_LENGTH 16
 #define DEFAULT_STARTTRANSCOLOR 160
 #define NUM_PALETTE_ENTRIES 256
 
-static UINT8** translationtablecache[MAXSKINS + 4] = {NULL};
+static UINT8** translationtablecache[TT_CACHE_SIZE] = {NULL};
 
 
 // See also the enum skincolors_t
 // TODO Callum: Can this be translated?
+/*
 const char *Color_Names[MAXSKINCOLORS] =
 {
 	"None",      // SKINCOLOR_NONE
@@ -144,7 +157,7 @@ const char *Color_Names[MAXSKINCOLORS] =
 	"Black",     // SKINCOLOR_BLACK
 	"Cyan",      // SKINCOLOR_CYAN
 	"Teal",      // SKINCOLOR_TEAL
-	"Steel_Blue",// SKINCOLOR_STEELBLUE
+	"Steel_Blue",// SKINCOLOR_STEEL
 	"Blue",      // SKINCOLOR_BLUE
 	"Peach",     // SKINCOLOR_PEACH
 	"Tan",       // SKINCOLOR_TAN
@@ -174,7 +187,7 @@ const UINT8 Color_Opposite[MAXSKINCOLORS*2] =
 	SKINCOLOR_WHITE,8,  // SKINCOLOR_BLACK
 	SKINCOLOR_NONE,8,   // SKINCOLOR_CYAN
 	SKINCOLOR_NONE,8,   // SKINCOLOR_TEAL
-	SKINCOLOR_NONE,8,   // SKINCOLOR_STEELBLUE
+	SKINCOLOR_NONE,8,   // SKINCOLOR_STEEL
 	SKINCOLOR_ORANGE,9, // SKINCOLOR_BLUE
 	SKINCOLOR_NONE,8,   // SKINCOLOR_PEACH
 	SKINCOLOR_NONE,8,   // SKINCOLOR_TAN
@@ -194,6 +207,7 @@ const UINT8 Color_Opposite[MAXSKINCOLORS*2] =
 	SKINCOLOR_NONE,8,   // SKINCOLOR_YELLOW
 	SKINCOLOR_NONE,8    // SKINCOLOR_GOLD
 };
+*/
 
 CV_PossibleValue_t Color_cons_t[MAXSKINCOLORS+1];
 
@@ -234,6 +248,7 @@ void R_InitTranslationTables(void)
 
 	\return	void
 */
+/*
 static void R_GenerateTranslationColormap(UINT8 *dest_colormap, INT32 skinnum, UINT8 color)
 {
 	// Table of indices into the palette of the first entries of each translated ramp
@@ -244,7 +259,7 @@ static void R_GenerateTranslationColormap(UINT8 *dest_colormap, INT32 skinnum, U
 		0x18, // SKINCOLOR_BLACK
 		0xd0, // SKINCOLOR_CYAN
 		0xdc, // SKINCOLOR_TEAL
-		0xc8, // SKINCOLOR_STEELBLUE
+		0xc8, // SKINCOLOR_STEEL
 		0xe2, // SKINCOLOR_BLUE
 		0x40, // SKINCOLOR_PEACH
 		0x48, // SKINCOLOR_TAN
@@ -326,7 +341,7 @@ static void R_GenerateTranslationColormap(UINT8 *dest_colormap, INT32 skinnum, U
 
 	case SKINCOLOR_WHITE:
 	case SKINCOLOR_BLACK:
-	case SKINCOLOR_STEELBLUE:
+	case SKINCOLOR_STEEL:
 	case SKINCOLOR_PINK:
 	case SKINCOLOR_LAVENDER:
 	case SKINCOLOR_PURPLE:
@@ -496,7 +511,7 @@ static void R_GenerateTranslationColormap(UINT8 *dest_colormap, INT32 skinnum, U
 		break;
 	}
 }
-
+*/
 
 /**	\brief	Retrieves a translation colormap from the cache.
 
@@ -516,6 +531,8 @@ UINT8* R_GetTranslationColormap(INT32 skinnum, skincolors_t color, UINT8 flags)
 	else if (skinnum == TC_BOSS) skintableindex = BOSS_TT_CACHE_INDEX;
 	else if (skinnum == TC_METALSONIC) skintableindex = METALSONIC_TT_CACHE_INDEX;
 	else if (skinnum == TC_ALLWHITE) skintableindex = ALLWHITE_TT_CACHE_INDEX;
+	else if (skinnum == TC_RAINBOW) skintableindex = RAINBOW_TT_CACHE_INDEX;
+	else if (skinnum == TC_BLINK) skintableindex = BLINK_TT_CACHE_INDEX;
 	else skintableindex = skinnum;
 
 	if (flags & GTC_CACHE)
@@ -534,7 +551,7 @@ UINT8* R_GetTranslationColormap(INT32 skinnum, skincolors_t color, UINT8 flags)
 	if (!ret)
 	{
 		ret = Z_MallocAlign(NUM_PALETTE_ENTRIES, (flags & GTC_CACHE) ? PU_LEVEL : PU_STATIC, NULL, 8);
-		R_GenerateTranslationColormap(ret, skinnum, color);
+		K_GenerateKartColormap(ret, skinnum, color); //R_GenerateTranslationColormap(ret, skinnum, color);		// SRB2kart
 
 		// Cache the colormap if desired
 		if (flags & GTC_CACHE)
@@ -561,6 +578,7 @@ void R_FlushTranslationColormapCache(void)
 			memset(translationtablecache[i], 0, MAXTRANSLATIONS * sizeof(UINT8**));
 }
 
+/*
 UINT8 R_GetColorByName(const char *name)
 {
 	UINT8 color = (UINT8)atoi(name);
@@ -571,6 +589,7 @@ UINT8 R_GetColorByName(const char *name)
 			return color;
 	return 0;
 }
+*/
 
 // ==========================================================================
 //               COMMON DRAWER FOR 8 AND 16 BIT COLOR MODES
@@ -606,24 +625,23 @@ void R_InitViewBuffer(INT32 width, INT32 height)
 	if (bytesperpixel < 1 || bytesperpixel > 4)
 		I_Error("R_InitViewBuffer: wrong bytesperpixel value %d\n", bytesperpixel);
 
-	// Handle resize, e.g. smaller view windows with border and/or status bar.
-	viewwindowx = (vid.width - width) >> 1;
+	viewwindowx = 0;
+	viewwindowy = 0;
 
 	// Column offset for those columns of the view window, but relative to the entire screen
 	for (i = 0; i < width; i++)
 		columnofs[i] = (viewwindowx + i) * bytesperpixel;
 
-	// Same with base row offset.
-	if (width == vid.width)
-		viewwindowy = 0;
-	else
-		viewwindowy = (vid.height - height) >> 1;
-
 	// Precalculate all row offsets.
 	for (i = 0; i < height; i++)
 	{
-		ylookup[i] = ylookup1[i] = screens[0] + (i+viewwindowy)*vid.width*bytesperpixel;
-		ylookup2[i] = screens[0] + (i+(vid.height>>1))*vid.width*bytesperpixel; // for splitscreen
+		ylookup[i] = ylookup1[i] = screens[0] + i*vid.width*bytesperpixel;
+		if (splitscreen == 1)
+			ylookup2[i] = screens[0] + (i+viewheight)*vid.width*bytesperpixel;
+		else
+			ylookup2[i] = screens[0] + i*vid.width*bytesperpixel + (viewwidth*bytesperpixel);
+		ylookup3[i] = screens[0] + (i+viewheight)*vid.width*bytesperpixel;
+		ylookup4[i] = screens[0] + (i+viewheight)*vid.width*bytesperpixel + (viewwidth*bytesperpixel);
 	}
 }
 

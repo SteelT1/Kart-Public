@@ -1,7 +1,7 @@
 // SONIC ROBO BLAST 2
 //-----------------------------------------------------------------------------
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -20,19 +20,38 @@
 // console vars
 extern consvar_t cv_playername;
 extern consvar_t cv_playercolor;
+extern consvar_t cv_skin;
+// secondary splitscreen player
+extern consvar_t cv_playername2;
+extern consvar_t cv_playercolor2;
+extern consvar_t cv_skin2;
+// third splitscreen player
+extern consvar_t cv_playername3;
+extern consvar_t cv_playercolor3;
+extern consvar_t cv_skin3;
+// fourth splitscreen player
+extern consvar_t cv_playername4;
+extern consvar_t cv_playercolor4;
+extern consvar_t cv_skin4;
+// preferred number of players
+extern consvar_t cv_splitplayers;
+
 #ifdef SEENAMES
 extern consvar_t cv_seenames, cv_allowseenames;
 #endif
 extern consvar_t cv_usemouse;
 extern consvar_t cv_usejoystick;
 extern consvar_t cv_usejoystick2;
+extern consvar_t cv_usejoystick3;
+extern consvar_t cv_usejoystick4;
 #ifdef LJOYSTICK
 extern consvar_t cv_joyport;
 extern consvar_t cv_joyport2;
 #endif
 extern consvar_t cv_joyscale;
 extern consvar_t cv_joyscale2;
-extern consvar_t cv_controlperkey;
+extern consvar_t cv_joyscale3;
+extern consvar_t cv_joyscale4;
 
 // splitscreen with second mouse
 extern consvar_t cv_mouse2port;
@@ -40,11 +59,6 @@ extern consvar_t cv_usemouse2;
 #if (defined (__unix__) && !defined (MSDOS)) || defined (UNIXCOMMON)
 extern consvar_t cv_mouse2opt;
 #endif
-extern consvar_t cv_invertmouse2;
-extern consvar_t cv_alwaysfreelook2;
-extern consvar_t cv_mousemove2;
-extern consvar_t cv_mousesens2;
-extern consvar_t cv_mouseysens2;
 
 // normally in p_mobj but the .h is not read
 extern consvar_t cv_itemrespawntime;
@@ -53,13 +67,6 @@ extern consvar_t cv_itemrespawn;
 extern consvar_t cv_flagtime;
 extern consvar_t cv_suddendeath;
 
-extern consvar_t cv_skin;
-
-// secondary splitscreen player
-extern consvar_t cv_playername2;
-extern consvar_t cv_playercolor2;
-extern consvar_t cv_skin2;
-
 extern consvar_t cv_touchtag;
 extern consvar_t cv_hidetime;
 
@@ -67,18 +74,13 @@ extern consvar_t cv_friendlyfire;
 extern consvar_t cv_pointlimit;
 extern consvar_t cv_timelimit;
 extern consvar_t cv_numlaps;
-extern consvar_t cv_usemapnumlaps;
+extern consvar_t cv_basenumlaps;
 extern UINT32 timelimitintics;
 extern consvar_t cv_allowexitlevel;
-
-extern consvar_t cv_hazardlog;
 
 extern consvar_t cv_autobalance;
 extern consvar_t cv_teamscramble;
 extern consvar_t cv_scrambleonchange;
-
-extern consvar_t cv_useranalog, cv_useranalog2;
-extern consvar_t cv_analog, cv_analog2;
 
 extern consvar_t cv_netstat;
 #ifdef WALLSPLATS
@@ -91,12 +93,40 @@ extern consvar_t cv_mute;
 extern consvar_t cv_killingdead;
 extern consvar_t cv_pause;
 
-extern consvar_t cv_restrictskinchange, cv_allowteamchange, cv_respawntime;
+extern consvar_t cv_restrictskinchange, cv_allowteamchange, cv_ingamecap, cv_respawntime;
 
-extern consvar_t cv_teleporters, cv_superring, cv_supersneakers, cv_invincibility;
+/*extern consvar_t cv_teleporters, cv_superring, cv_supersneakers, cv_invincibility;
 extern consvar_t cv_jumpshield, cv_watershield, cv_ringshield, cv_forceshield, cv_bombshield;
 extern consvar_t cv_1up, cv_eggmanbox;
-extern consvar_t cv_recycler;
+extern consvar_t cv_recycler;*/
+
+// SRB2kart items
+extern consvar_t cv_sneaker, cv_rocketsneaker, cv_invincibility, cv_banana;
+extern consvar_t cv_eggmanmonitor, cv_orbinaut, cv_jawz, cv_mine;
+extern consvar_t cv_ballhog, cv_selfpropelledbomb, cv_grow, cv_shrink;
+extern consvar_t cv_thundershield, cv_hyudoro, cv_pogospring, cv_kitchensink;
+
+extern consvar_t cv_triplesneaker, cv_triplebanana, cv_decabanana;
+extern consvar_t cv_tripleorbinaut, cv_quadorbinaut, cv_dualjawz;
+
+extern consvar_t cv_kartminimap;
+extern consvar_t cv_kartcheck;
+extern consvar_t cv_kartinvinsfx;
+extern consvar_t cv_kartspeed;
+extern consvar_t cv_kartbumpers;
+extern consvar_t cv_kartfrantic;
+extern consvar_t cv_kartcomeback;
+extern consvar_t cv_kartencore;
+extern consvar_t cv_kartvoterulechanges;
+extern consvar_t cv_kartspeedometer;
+extern consvar_t cv_kartvoices;
+
+extern consvar_t cv_karteliminatelast;
+
+extern consvar_t cv_votetime;
+
+extern consvar_t cv_kartdebugitem, cv_kartdebugamount, cv_kartdebugshrink, cv_kartdebugdistribution, cv_kartdebughuddrop;
+extern consvar_t cv_kartdebugcheckpoint, cv_kartdebugnodes;
 
 extern consvar_t cv_itemfinder;
 
@@ -109,8 +139,6 @@ extern consvar_t cv_startinglives;
 // for F_finale.c
 extern consvar_t cv_rollingdemos;
 
-extern consvar_t cv_resetmusic;
-
 extern consvar_t cv_ringslinger, cv_soundtest;
 
 extern consvar_t cv_specialrings, cv_powerstones, cv_matchboxes, cv_competitionboxes;
@@ -121,17 +149,7 @@ extern consvar_t cv_maxping;
 
 extern consvar_t cv_skipmapcheck;
 
-extern consvar_t cv_sleep, cv_screenshot_option, cv_screenshot_folder;
-
-extern consvar_t cv_moviemode;
-
-extern consvar_t cv_zlib_level, cv_zlib_memory, cv_zlib_strategy;
-
-extern consvar_t cv_zlib_window_bits, cv_zlib_levela, cv_zlib_memorya;
-
-extern consvar_t cv_zlib_strategya, cv_zlib_window_bitsa;
-
-extern consvar_t cv_apng_delay;
+extern consvar_t cv_sleep;
 
 typedef enum
 {
@@ -154,11 +172,16 @@ typedef enum
 	XD_REQADDFILE,  // 17
 	XD_DELFILE,     // 18
 	XD_SETMOTD,     // 19
-	XD_SUICIDE,     // 20
+	XD_RESPAWN,     // 20
+	XD_DEMOTED,     // 21
+	XD_SETUPVOTE,   // 22
+	XD_MODIFYVOTE,  // 23
+	XD_PICKVOTE,    // 24
+	XD_REMOVEPLAYER,// 25
 #ifdef HAVE_BLUA
-	XD_LUACMD,      // 21
-	XD_LUAVAR,      // 22
-	XD_LUAFILE,     // 23
+	XD_LUACMD,      // 26
+	XD_LUAVAR,      // 27
+	XD_LUAFILE,     // 28
 #endif
 	MAXNETXCMD
 } netxcmd_t;
@@ -212,8 +235,15 @@ void D_SendPlayerConfig(void);
 void Command_ExitGame_f(void);
 void Command_Retry_f(void);
 void D_GameTypeChanged(INT32 lastgametype); // not a real _OnChange function anymore
-void D_MapChange(INT32 pmapnum, INT32 pgametype, boolean pultmode, boolean presetplayers, INT32 pdelay, boolean pskipprecutscene, boolean pfromlevelselect);
+void D_MapChange(INT32 pmapnum, INT32 pgametype, boolean pencoremode, boolean presetplayers, INT32 pdelay, boolean pskipprecutscene, boolean pfromlevelselect);
+void D_SetupVote(void);
+void D_ModifyClientVote(SINT8 voted, UINT8 splitplayer);
+void D_PickVote(void);
 void ObjectPlace_OnChange(void);
+boolean IsPlayerAdmin(INT32 playernum);
+void SetAdminPlayer(INT32 playernum);
+void ClearAdminPlayers(void);
+void RemoveAdminPlayer(INT32 playernum);
 void ItemFinder_OnChange(void);
 void D_SetPassword(const char *pw);
 
@@ -221,5 +251,3 @@ void D_SetPassword(const char *pw);
 UINT8 CanChangeSkin(INT32 playernum);
 
 #endif
-
-

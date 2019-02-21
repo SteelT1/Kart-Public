@@ -1,7 +1,7 @@
 // SONIC ROBO BLAST 2
 //-----------------------------------------------------------------------------
 // Copyright (C) 2014-2016 by John "JTE" Muniz.
-// Copyright (C) 2014-2016 by Sonic Team Junior.
+// Copyright (C) 2014-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -27,9 +27,9 @@ enum skin {
 	skin_flags,
 	skin_realname,
 	skin_hudname,
-	skin_charsel,
-	skin_face,
-	skin_superface,
+	skin_facerank,
+	skin_facewant,
+	skin_facemmap,
 	skin_ability,
 	skin_ability2,
 	skin_thokitem,
@@ -38,6 +38,10 @@ enum skin {
 	skin_actionspd,
 	skin_mindash,
 	skin_maxdash,
+	// SRB2kart
+	skin_kartspeed,
+	skin_kartweight,
+	//
 	skin_normalspeed,
 	skin_runspeed,
 	skin_thrustfactor,
@@ -57,9 +61,9 @@ static const char *const skin_opt[] = {
 	"flags",
 	"realname",
 	"hudname",
-	"charsel",
-	"face",
-	"superface",
+	"facerank",
+	"facewant",
+	"facemmap",
 	"ability",
 	"ability2",
 	"thokitem",
@@ -68,6 +72,10 @@ static const char *const skin_opt[] = {
 	"actionspd",
 	"mindash",
 	"maxdash",
+	// SRB2kart
+	"kartspeed",
+	"kartweight",
+	//
 	"normalspeed",
 	"runspeed",
 	"thrustfactor",
@@ -113,23 +121,23 @@ static int skin_get(lua_State *L)
 	case skin_hudname:
 		lua_pushstring(L, skin->hudname);
 		break;
-	case skin_charsel:
+	case skin_facerank:
 		for (i = 0; i < 8; i++)
-			if (!skin->charsel[i])
+			if (!skin->facerank[i])
 				break;
-		lua_pushlstring(L, skin->charsel, i);
+		lua_pushlstring(L, skin->facerank, i);
 		break;
-	case skin_face:
+	case skin_facewant:
 		for (i = 0; i < 8; i++)
-			if (!skin->face[i])
+			if (!skin->facewant[i])
 				break;
-		lua_pushlstring(L, skin->face, i);
+		lua_pushlstring(L, skin->facewant, i);
 		break;
-	case skin_superface:
+	case skin_facemmap:
 		for (i = 0; i < 8; i++)
-			if (!skin->superface[i])
+			if (!skin->facemmap[i])
 				break;
-		lua_pushlstring(L, skin->superface, i);
+		lua_pushlstring(L, skin->facemmap, i);
 		break;
 	case skin_ability:
 		lua_pushinteger(L, skin->ability);
@@ -155,6 +163,14 @@ static int skin_get(lua_State *L)
 	case skin_maxdash:
 		lua_pushfixed(L, skin->maxdash);
 		break;
+	// SRB2kart
+	case skin_kartspeed:
+		lua_pushinteger(L, skin->kartspeed);
+		break;
+	case skin_kartweight:
+		lua_pushinteger(L, skin->kartweight);
+		break;
+	//
 	case skin_normalspeed:
 		lua_pushfixed(L, skin->normalspeed);
 		break;

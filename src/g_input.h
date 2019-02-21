@@ -1,7 +1,7 @@
 // SONIC ROBO BLAST 2
 //-----------------------------------------------------------------------------
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -71,7 +71,19 @@ typedef enum
 	KEY_DBL2JOY1 = KEY_DBL2MOUSE1 + MOUSEBUTTONS,
 	KEY_DBL2HAT1 = KEY_DBL2JOY1 + JOYBUTTONS,
 
-	KEY_MOUSEWHEELUP = KEY_DBL2HAT1 + JOYHATS*4,
+	KEY_3JOY1 = KEY_DBL2HAT1 + JOYHATS*4,
+	KEY_3HAT1 = KEY_3JOY1 + JOYBUTTONS,
+
+	KEY_DBL3JOY1 = KEY_3HAT1 + JOYHATS*4,
+	KEY_DBL3HAT1 = KEY_DBL3JOY1 + JOYBUTTONS,
+
+	KEY_4JOY1 = KEY_DBL3HAT1 + JOYHATS*4,
+	KEY_4HAT1 = KEY_4JOY1 + JOYBUTTONS,
+
+	KEY_DBL4JOY1 = KEY_4HAT1 + JOYHATS*4,
+	KEY_DBL4HAT1 = KEY_DBL4JOY1 + JOYBUTTONS,
+
+	KEY_MOUSEWHEELUP = KEY_DBL4HAT1 + JOYHATS*4,
 	KEY_MOUSEWHEELDOWN = KEY_MOUSEWHEELUP + 1,
 	KEY_2MOUSEWHEELUP = KEY_MOUSEWHEELDOWN + 1,
 	KEY_2MOUSEWHEELDOWN = KEY_2MOUSEWHEELUP + 1,
@@ -82,42 +94,30 @@ typedef enum
 typedef enum
 {
 	gc_null = 0, // a key/button mapped to gc_null has no effect
-	gc_forward,
-	gc_backward,
-	gc_strafeleft,
-	gc_straferight,
+	gc_aimforward,
+	gc_aimbackward,
 	gc_turnleft,
 	gc_turnright,
-	gc_weaponnext,
-	gc_weaponprev,
-	gc_wepslot1,
-	gc_wepslot2,
-	gc_wepslot3,
-	gc_wepslot4,
-	gc_wepslot5,
-	gc_wepslot6,
-	gc_wepslot7,
-	gc_wepslot8,
-	gc_wepslot9,
-	gc_wepslot10,
+	gc_accelerate,
+	gc_drift,
+	gc_brake,
 	gc_fire,
-	gc_firenormal,
-	gc_tossflag,
-	gc_use,
-	gc_camtoggle,
-	gc_camleft,
-	gc_camright,
+	gc_lookback,
 	gc_camreset,
+	gc_camtoggle,
+	gc_spectate,
 	gc_lookup,
 	gc_lookdown,
 	gc_centerview,
-	gc_mouseaiming, // mouse aiming is momentary (toggleable in the menu)
 	gc_talkkey,
 	gc_teamkey,
 	gc_scores,
-	gc_jump,
 	gc_console,
 	gc_pause,
+	gc_systemmenu,
+	gc_screenshot,
+	gc_recordgif,
+	gc_viewpoint,
 	gc_custom1, // Lua scriptable
 	gc_custom2, // Lua scriptable
 	gc_custom3, // Lua scriptable
@@ -126,12 +126,15 @@ typedef enum
 
 // mouse values are used once
 extern consvar_t cv_mousesens, cv_mouseysens;
+extern consvar_t cv_mousesens2, cv_mouseysens2;
+extern consvar_t cv_controlperkey;
 
 extern INT32 mousex, mousey;
 extern INT32 mlooky; //mousey with mlookSensitivity
 extern INT32 mouse2x, mouse2y, mlook2y;
 
-extern INT32 joyxmove[JOYAXISSET], joyymove[JOYAXISSET], joy2xmove[JOYAXISSET], joy2ymove[JOYAXISSET];
+extern INT32 joyxmove[JOYAXISSET], joyymove[JOYAXISSET], joy2xmove[JOYAXISSET], joy2ymove[JOYAXISSET],
+	joy3xmove[JOYAXISSET], joy3ymove[JOYAXISSET], joy4xmove[JOYAXISSET], joy4ymove[JOYAXISSET];
 
 // current state of the keys: true if pushed
 extern UINT8 gamekeydown[NUMINPUTS];
@@ -139,8 +142,12 @@ extern UINT8 gamekeydown[NUMINPUTS];
 // two key codes (or virtual key) per game control
 extern INT32 gamecontrol[num_gamecontrols][2];
 extern INT32 gamecontrolbis[num_gamecontrols][2]; // secondary splitscreen player
+extern INT32 gamecontrol3[num_gamecontrols][2];
+extern INT32 gamecontrol4[num_gamecontrols][2];
 #define PLAYER1INPUTDOWN(gc) (gamekeydown[gamecontrol[gc][0]] || gamekeydown[gamecontrol[gc][1]])
 #define PLAYER2INPUTDOWN(gc) (gamekeydown[gamecontrolbis[gc][0]] || gamekeydown[gamecontrolbis[gc][1]])
+#define PLAYER3INPUTDOWN(gc) (gamekeydown[gamecontrol3[gc][0]] || gamekeydown[gamecontrol3[gc][1]])
+#define PLAYER4INPUTDOWN(gc) (gamekeydown[gamecontrol4[gc][0]] || gamekeydown[gamecontrol4[gc][1]])
 
 // peace to my little coder fingers!
 // check a gamecontrol being active or not
@@ -154,10 +161,13 @@ INT32 G_KeyStringtoNum(const char *keystr);
 
 // detach any keys associated to the given game control
 void G_ClearControlKeys(INT32 (*setupcontrols)[2], INT32 control);
+void G_ClearAllControlKeys(void);
 void Command_Setcontrol_f(void);
 void Command_Setcontrol2_f(void);
-void G_Controldefault(void);
+void Command_Setcontrol3_f(void);
+void Command_Setcontrol4_f(void);
+void G_Controldefault(UINT8 player);
 void G_SaveKeySetting(FILE *f);
-void G_CheckDoubleUsage(INT32 keynum);
+INT32 G_CheckDoubleUsage(INT32 keynum, boolean modify);
 
 #endif

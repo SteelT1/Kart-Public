@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -237,6 +237,7 @@ result_e T_MovePlane(sector_t *sector, fixed_t speed, fixed_t dest, boolean crus
 				{
 					case MT_GOOP: // Egg Slimer's goop objects
 					case MT_SPINFIRE: // Elemental Shield flame balls
+					case MT_SNEAKERTRAIL:
 					case MT_SPIKE: // Floor Spike
 						// Is the object hang from the ceiling?
 						// In that case, swap the planes used.
@@ -811,6 +812,8 @@ void T_BounceCheese(levelspecthink_t *bouncer)
 		{
 			bouncer->sector->ceilingheight = actionsector->ceilingheight;
 			bouncer->sector->floorheight = bouncer->sector->ceilingheight - (halfheight*2);
+			T_MovePlane(bouncer->sector, 0, bouncer->sector->ceilingheight, 0, 1, -1); // update things on ceiling
+			T_MovePlane(bouncer->sector, 0, bouncer->sector->floorheight, 0, 0, -1); // update things on floor
 			P_RecalcPrecipInSector(actionsector);
 			bouncer->sector->ceilingdata = NULL;
 			bouncer->sector->floordata = NULL;
@@ -825,6 +828,8 @@ void T_BounceCheese(levelspecthink_t *bouncer)
 		{
 			bouncer->sector->ceilingheight = floorheight + (halfheight << 1);
 			bouncer->sector->floorheight = floorheight;
+			T_MovePlane(bouncer->sector, 0, bouncer->sector->ceilingheight, 0, 1, -1); // update things on ceiling
+			T_MovePlane(bouncer->sector, 0, bouncer->sector->floorheight, 0, 0, -1); // update things on floor
 			P_RecalcPrecipInSector(actionsector);
 			bouncer->sector->ceilingdata = NULL;
 			bouncer->sector->floordata = NULL;
@@ -841,9 +846,9 @@ void T_BounceCheese(levelspecthink_t *bouncer)
 		}
 
 		T_MovePlane(bouncer->sector, bouncer->speed/2, bouncer->sector->ceilingheight -
-			70*FRACUNIT, 0, 1, -1); // move floor
+			70*FRACUNIT, 0, 1, -1); // move ceiling
 		T_MovePlane(bouncer->sector, bouncer->speed/2, bouncer->sector->floorheight - 70*FRACUNIT,
-			0, 0, -1); // move ceiling
+			0, 0, -1); // move floor
 
 		bouncer->sector->floorspeed = -bouncer->speed/2;
 		bouncer->sector->ceilspeed = 42;
@@ -893,6 +898,8 @@ void T_BounceCheese(levelspecthink_t *bouncer)
 		{
 			bouncer->sector->floorheight = bouncer->floorwasheight;
 			bouncer->sector->ceilingheight = bouncer->ceilingwasheight;
+			T_MovePlane(bouncer->sector, 0, bouncer->sector->ceilingheight, 0, 1, -1); // update things on ceiling
+			T_MovePlane(bouncer->sector, 0, bouncer->sector->floorheight, 0, 0, -1); // update things on floor
 			bouncer->sector->ceilingdata = NULL;
 			bouncer->sector->floordata = NULL;
 			bouncer->sector->floorspeed = 0;
@@ -1786,8 +1793,8 @@ static mobj_t *SearchMarioNode(msecnode_t *node)
 			break;
 		}
 		// Ignore popped monitors, too.
-		if (node->m_thing->flags & MF_MONITOR
-		&& node->m_thing->threshold == 68)
+		if ((node->m_thing->flags & MF_MONITOR || node->m_thing->type == MT_RANDOMITEM)
+			&& node->m_thing->threshold == 68)
 			continue;
 		// Okay, we found something valid.
 		if (!thing // take either the first thing
@@ -1818,12 +1825,23 @@ void T_ThwompSector(levelspecthink_t *thwomp)
 #define ceilingwasheight vars[5]
 	fixed_t thwompx, thwompy;
 	sector_t *actionsector;
+	ffloor_t *rover = NULL;
 	INT32 secnum;
+
+	// SRB2kart 170217 - Thwomps are automatic.
+	// Put up a timer before you start falling down.
+	// I could of used rowoffset, but the FOF actually
+	// modifies the textures's Y offset. It doesn't with
+	// textureoffset, so Effect 4 can be ignored as usual.
+	if (thwomp->sourceline->flags & ML_EFFECT1
+		&& leveltime < (unsigned)(sides[thwomp->sourceline->sidenum[0]].textureoffset>>FRACBITS))
+		thwomp->direction = 0;
 
 	// If you just crashed down, wait a second before coming back up.
 	if (--thwomp->distance > 0)
 	{
-		sides[thwomp->sourceline->sidenum[0]].midtexture = sides[thwomp->sourceline->sidenum[0]].bottomtexture;
+		sides[thwomp->sourceline->sidenum[0]].midtexture = sides[thwomp->sourceline->sidenum[0]].toptexture;
+		//sides[thwomp->sourceline->sidenum[0]].midtexture = sides[thwomp->sourceline->sidenum[0]].bottomtexture;
 		return;
 	}
 
@@ -1832,7 +1850,16 @@ void T_ThwompSector(levelspecthink_t *thwomp)
 	secnum = P_FindSectorFromTag((INT16)thwomp->vars[0], -1);
 
 	if (secnum > 0)
+	{
 		actionsector = &sectors[secnum];
+
+		// Look for thwomp FFloor
+		for (rover = actionsector->ffloors; rover; rover = rover->next)
+		{
+			if (rover->master == thwomp->sourceline)
+				break;
+		}
+	}
 	else
 		return; // Bad bad bad!
 
@@ -1921,10 +1948,13 @@ void T_ThwompSector(levelspecthink_t *thwomp)
 		{
 			mobj_t *mp = (void *)&actionsector->soundorg;
 
-			if (thwomp->sourceline->flags & ML_EFFECT4)
-				S_StartSound(mp, sides[thwomp->sourceline->sidenum[0]].textureoffset>>FRACBITS);
-			else
-				S_StartSound(mp, sfx_thwomp);
+			if (!rover || (rover->flags & FF_EXISTS))
+			{
+				if (thwomp->sourceline->flags & ML_EFFECT4)
+					S_StartSound(mp, sides[thwomp->sourceline->sidenum[0]].textureoffset>>FRACBITS);
+				else
+					S_StartSound(mp, sfx_thwomp);
+			}
 
 			thwomp->direction = 1; // start heading back up
 			thwomp->distance = TICRATE; // but only after a small delay
@@ -1935,23 +1965,31 @@ void T_ThwompSector(levelspecthink_t *thwomp)
 	}
 	else // Not going anywhere, so look for players.
 	{
-		thinker_t *th;
-		mobj_t *mo;
+		//thinker_t *th;
+		//mobj_t *mo;
 
+		thwomp->direction = -1;
+
+		/* // SRB2kart 170217 - Thwomps are automatic.
 		// scan the thinkers to find players!
-		for (th = thinkercap.next; th != &thinkercap; th = th->next)
+		if (!rover || (rover->flags & FF_EXISTS))
 		{
-			if (th->function.acp1 != (actionf_p1)P_MobjThinker)
-				continue;
-
-			mo = (mobj_t *)th;
-			if (mo->type == MT_PLAYER && mo->health && mo->z <= thwomp->sector->ceilingheight
-				&& P_AproxDistance(thwompx - mo->x, thwompy - mo->y) <= 96*FRACUNIT)
+			// scan the thinkers to find players!
+			for (th = thinkercap.next; th != &thinkercap; th = th->next)
 			{
-				thwomp->direction = -1;
-				break;
+				if (th->function.acp1 != (actionf_p1)P_MobjThinker)
+					continue;
+
+				mo = (mobj_t *)th;
+				if (mo->type == MT_PLAYER && mo->health && mo->player && !mo->player->spectator
+				    && mo->z <= thwomp->sector->ceilingheight
+					&& P_AproxDistance(thwompx - mo->x, thwompy - mo->y) <= 96*FRACUNIT)
+				{
+					thwomp->direction = -1;
+					break;
+				}
 			}
-		}
+		}*/
 
 		thwomp->sector->ceilspeed = 0;
 		thwomp->sector->floorspeed = 0;
@@ -2024,33 +2062,6 @@ foundenemy:
 }
 
 //
-// P_IsObjectOnRealGround
-//
-// Helper function for T_EachTimeThinker
-// Like P_IsObjectOnGroundIn, except ONLY THE REAL GROUND IS CONSIDERED, NOT FOFS
-// I'll consider whether to make this a more globally accessible function or whatever in future
-// -- Monster Iestyn
-//
-static boolean P_IsObjectOnRealGround(mobj_t *mo, sector_t *sec)
-{
-	// Is the object in reverse gravity?
-	if (mo->eflags & MFE_VERTICALFLIP)
-	{
-		// Detect if the player is on the ceiling.
-		if (mo->z+mo->height >= P_GetSpecialTopZ(mo, sec, sec))
-			return true;
-	}
-	// Nope!
-	else
-	{
-		// Detect if the player is on the floor.
-		if (mo->z <= P_GetSpecialBottomZ(mo, sec, sec))
-			return true;
-	}
-	return false;
-}
-
-//
 // P_HavePlayersEnteredArea
 //
 // Helper function for T_EachTimeThinker
@@ -2103,6 +2114,7 @@ void T_EachTimeThinker(levelspecthink_t *eachtime)
 	boolean floortouch = false;
 	fixed_t bottomheight, topheight;
 	msecnode_t *node;
+	ffloor_t *rover;
 
 	for (i = 0; i < MAXPLAYERS; i++)
 	{
@@ -2149,6 +2161,19 @@ void T_EachTimeThinker(levelspecthink_t *eachtime)
 			while ((targetsecnum = P_FindSectorFromLineTag(sec->lines[i], targetsecnum)) >= 0)
 			{
 				targetsec = &sectors[targetsecnum];
+
+				// Find the FOF corresponding to the control linedef
+				for (rover = targetsec->ffloors; rover; rover = rover->next)
+				{
+					if (rover->master == sec->lines[i])
+						break;
+				}
+
+				if (!rover) // This should be impossible, but don't complain if it is the case somehow
+					continue;
+
+				if (!(rover->flags & FF_EXISTS)) // If the FOF does not "exist", we pretend that nobody's there
+					continue;
 
 				for (j = 0; j < MAXPLAYERS; j++)
 				{
@@ -2503,11 +2528,11 @@ void T_CameraScanner(elevator_t *elevator)
 {
 	// leveltime is compared to make multiple scanners in one map function correctly.
 	static tic_t lastleveltime = 32000; // any number other than 0 should do here
-	static boolean camerascanned, camerascanned2;
+	static boolean camerascanned, camerascanned2, camerascanned3, camerascanned4;
 
 	if (leveltime != lastleveltime) // Back on the first camera scanner
 	{
-		camerascanned = camerascanned2 = false;
+		camerascanned = camerascanned2 = camerascanned3 = camerascanned4 = false;
 		lastleveltime = leveltime;
 	}
 
@@ -2564,6 +2589,62 @@ void T_CameraScanner(elevator_t *elevator)
 				CV_Set(&cv_cam2_rotate, va("%f", (double)t_cam2_rotate));
 
 			t_cam2_dist = t_cam2_height = t_cam2_rotate = -42;
+		}
+	}
+
+	if (splitscreen > 1 && players[thirddisplayplayer].mo)
+	{
+		if (players[thirddisplayplayer].mo->subsector->sector == elevator->actionsector)
+		{
+			if (t_cam3_rotate == -42)
+				t_cam3_dist = cv_cam3_dist.value;
+			if (t_cam3_rotate == -42)
+				t_cam3_height = cv_cam3_height.value;
+			if (t_cam3_rotate == -42)
+				t_cam3_rotate = cv_cam3_rotate.value;
+			CV_SetValue(&cv_cam3_height, FixedInt(elevator->sector->floorheight));
+			CV_SetValue(&cv_cam3_dist, FixedInt(elevator->sector->ceilingheight));
+			CV_SetValue(&cv_cam3_rotate, elevator->distance);
+			camerascanned3 = true;
+		}
+		else if (!camerascanned3)
+		{
+			if (t_cam3_height != -42 && cv_cam3_height.value != t_cam3_height)
+				CV_Set(&cv_cam3_height, va("%f", (double)FIXED_TO_FLOAT(t_cam3_height)));
+			if (t_cam3_dist != -42 && cv_cam3_dist.value != t_cam3_dist)
+				CV_Set(&cv_cam3_dist, va("%f", (double)FIXED_TO_FLOAT(t_cam3_dist)));
+			if (t_cam3_rotate != -42 && cv_cam3_rotate.value != t_cam3_rotate)
+				CV_Set(&cv_cam3_rotate, va("%f", (double)t_cam3_rotate));
+
+			t_cam3_dist = t_cam3_height = t_cam3_rotate = -42;
+		}
+	}
+
+	if (splitscreen > 2 && players[fourthdisplayplayer].mo)
+	{
+		if (players[fourthdisplayplayer].mo->subsector->sector == elevator->actionsector)
+		{
+			if (t_cam4_rotate == -42)
+				t_cam4_dist = cv_cam4_dist.value;
+			if (t_cam4_rotate == -42)
+				t_cam4_height = cv_cam4_height.value;
+			if (t_cam4_rotate == -42)
+				t_cam4_rotate = cv_cam4_rotate.value;
+			CV_SetValue(&cv_cam4_height, FixedInt(elevator->sector->floorheight));
+			CV_SetValue(&cv_cam4_dist, FixedInt(elevator->sector->ceilingheight));
+			CV_SetValue(&cv_cam4_rotate, elevator->distance);
+			camerascanned4 = true;
+		}
+		else if (!camerascanned4)
+		{
+			if (t_cam4_height != -42 && cv_cam4_height.value != t_cam4_height)
+				CV_Set(&cv_cam4_height, va("%f", (double)FIXED_TO_FLOAT(t_cam4_height)));
+			if (t_cam4_dist != -42 && cv_cam4_dist.value != t_cam4_dist)
+				CV_Set(&cv_cam4_dist, va("%f", (double)FIXED_TO_FLOAT(t_cam4_dist)));
+			if (t_cam4_rotate != -42 && cv_cam4_rotate.value != t_cam4_rotate)
+				CV_Set(&cv_cam4_rotate, va("%f", (double)t_cam4_rotate));
+
+			t_cam4_dist = t_cam4_height = t_cam4_rotate = -42;
 		}
 	}
 }
@@ -2928,6 +3009,7 @@ void EV_CrumbleChain(sector_t *sec, ffloor_t *rover)
 	fixed_t topz;
 	fixed_t a, b, c;
 	mobjtype_t type = MT_ROCKCRUMBLE1;
+	const fixed_t spacing = 48*mapobjectscale;
 
 	// If the control sector has a special
 	// of Section3:7-15, use the custom debris.
@@ -2959,16 +3041,16 @@ void EV_CrumbleChain(sector_t *sec, ffloor_t *rover)
 	rightx = sec->lines[rightmostvertex]->v1->x;
 	topy = sec->lines[topmostvertex]->v1->y-(16<<FRACBITS);
 	bottomy = sec->lines[bottommostvertex]->v1->y;
-	topz = *rover->topheight-(16<<FRACBITS);
+	topz = *rover->topheight-(spacing/2);
 
-	for (a = leftx; a < rightx; a += (32<<FRACBITS))
+	for (a = leftx; a < rightx; a += spacing)
 	{
-		for (b = topy; b > bottomy; b -= (32<<FRACBITS))
+		for (b = topy; b > bottomy; b -= spacing)
 		{
 			if (R_PointInSubsector(a, b)->sector == sec)
 			{
 				mobj_t *spawned = NULL;
-				for (c = topz; c > *rover->bottomheight; c -= (32<<FRACBITS))
+				for (c = topz; c > *rover->bottomheight; c -= spacing)
 				{
 					spawned = P_SpawnMobj(a, b, c, type);
 					spawned->fuse = 3*TICRATE;
@@ -3183,7 +3265,7 @@ INT32 EV_MarioBlock(sector_t *sec, sector_t *roversector, fixed_t topheight, mob
 		P_SetThingPosition(thing);
 		if (thing->flags & MF_SHOOTABLE)
 			P_DamageMobj(thing, puncher, puncher, 1);
-		else if (thing->type == MT_RING || thing->type == MT_COIN)
+		else if (thing->type == MT_RING || thing->type == MT_COIN || thing->type == MT_RANDOMITEM)
 		{
 			thing->momz = FixedMul(3*FRACUNIT, thing->scale);
 			P_TouchSpecialThing(thing, puncher, false);

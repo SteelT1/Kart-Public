@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -28,6 +28,7 @@
 #include "m_menu.h"
 #include "m_cheat.h"
 #include "p_setup.h" // NiGHTS grading
+#include "k_kart.h" // SRB2kart
 
 //random index
 #include "m_random.h"
@@ -49,8 +50,9 @@ UINT16 objectsdrawn = 0;
 // STATUS BAR DATA
 //
 
-patch_t *faceprefix[MAXSKINS]; // face status patches
-patch_t *superprefix[MAXSKINS]; // super face status patches
+patch_t *facerankprefix[MAXSKINS]; // ranking
+patch_t *facewantprefix[MAXSKINS]; // wanted
+patch_t *facemmapprefix[MAXSKINS]; // minimap
 
 // ------------------------------------------
 //             status bar overlay
@@ -76,7 +78,7 @@ static patch_t *race1;
 static patch_t *race2;
 static patch_t *race3;
 static patch_t *racego;
-static patch_t *ttlnum;
+//static patch_t *ttlnum;
 static patch_t *nightslink;
 static patch_t *count5;
 static patch_t *count4;
@@ -123,7 +125,11 @@ static patch_t *minicaps;
 static patch_t *gotrflag;
 static patch_t *gotbflag;
 
-static boolean facefreed[MAXPLAYERS];
+// Midnight Channel:
+static patch_t *hud_tv1;
+static patch_t *hud_tv2;
+
+// SRB2kart
 
 hudinfo_t hudinfo[NUMHUDITEMS] =
 {
@@ -171,7 +177,7 @@ hudinfo_t hudinfo[NUMHUDITEMS] =
 boolean ST_SameTeam(player_t *a, player_t *b)
 {
 	// Just pipe team messages to everyone in co-op or race.
-	if (!G_RingSlingerGametype())
+	if (!G_BattleGametype())
 		return true;
 
 	// Spectator chat.
@@ -210,20 +216,20 @@ void ST_doPaletteStuff(void)
 	else
 		palette = 0;
 
+#ifdef HWRENDER
+	if (rendermode == render_opengl)
+		palette = 0; // No flashpals here in OpenGL
+#endif
+
 	palette = min(max(palette, 0), 13);
 
 	if (palette != st_palette)
 	{
 		st_palette = palette;
 
-#ifdef HWRENDER
-		if (rendermode == render_opengl)
-			HWR_SetPaletteColor(0);
-		else
-#endif
 		if (rendermode != render_none)
 		{
-			V_SetPaletteLump(GetPalette()); // Reset the palette
+			//V_SetPaletteLump(GetPalette()); // Reset the palette -- is this needed?
 			if (!splitscreen)
 				V_SetPalette(palette);
 		}
@@ -337,31 +343,28 @@ void ST_LoadGraphics(void)
 
 	for (i = 0; i < 7; ++i)
 		ngradeletters[i] = W_CachePatchName(va("GRADE%d", i), PU_HUDGFX);
+
+	K_LoadKartHUDGraphics();
+
+	// Midnight Channel:
+	hud_tv1 = W_CachePatchName("HUD_TV1", PU_HUDGFX);
+	hud_tv2 = W_CachePatchName("HUD_TV2", PU_HUDGFX);
 }
 
 // made separate so that skins code can reload custom face graphics
-void ST_LoadFaceGraphics(char *facestr, char *superstr, INT32 skinnum)
+void ST_LoadFaceGraphics(char *rankstr, char *wantstr, char *mmapstr, INT32 skinnum)
 {
-	faceprefix[skinnum] = W_CachePatchName(facestr, PU_HUDGFX);
-	superprefix[skinnum] = W_CachePatchName(superstr, PU_HUDGFX);
-	facefreed[skinnum] = false;
+	facerankprefix[skinnum] = W_CachePatchName(rankstr, PU_HUDGFX);
+	facewantprefix[skinnum] = W_CachePatchName(wantstr, PU_HUDGFX);
+	facemmapprefix[skinnum] = W_CachePatchName(mmapstr, PU_HUDGFX);
 }
-
-#ifdef DELFILE
-void ST_UnLoadFaceGraphics(INT32 skinnum)
-{
-	Z_Free(faceprefix[skinnum]);
-	Z_Free(superprefix[skinnum]);
-	facefreed[skinnum] = true;
-}
-#endif
 
 void ST_ReloadSkinFaceGraphics(void)
 {
 	INT32 i;
 
 	for (i = 0; i < numskins; i++)
-		ST_LoadFaceGraphics(skins[i].face, skins[i].superface, i);
+		ST_LoadFaceGraphics(skins[i].facerank, skins[i].facewant, skins[i].facemmap, i);
 }
 
 static inline void ST_InitData(void)
@@ -402,11 +405,6 @@ lumpnum_t st_borderpatchnum;
 
 void ST_Init(void)
 {
-	INT32 i;
-
-	for (i = 0; i < MAXPLAYERS; i++)
-		facefreed[i] = true;
-
 	if (dedicated)
 		return;
 
@@ -427,11 +425,14 @@ void ST_changeDemoView(void)
 
 boolean st_overlay;
 
+/*
 static INT32 SCZ(INT32 z)
 {
 	return FixedInt(FixedMul(z<<FRACBITS, vid.fdupy));
 }
+*/
 
+/*
 static INT32 SCY(INT32 y)
 {
 	//31/10/99: fixed by Hurdler so it _works_ also in hardware mode
@@ -446,7 +447,9 @@ static INT32 SCY(INT32 y)
 	}
 	return y;
 }
+*/
 
+/*
 static INT32 STRINGY(INT32 y)
 {
 	//31/10/99: fixed by Hurdler so it _works_ also in hardware mode
@@ -460,7 +463,9 @@ static INT32 STRINGY(INT32 y)
 	}
 	return y;
 }
+*/
 
+/*
 static INT32 SPLITFLAGS(INT32 f)
 {
 	// Pass this V_SNAPTO(TOP|BOTTOM) and it'll trim them to account for splitscreen! -Red
@@ -473,11 +478,14 @@ static INT32 SPLITFLAGS(INT32 f)
 	}
 	return f;
 }
+*/
 
+/*
 static INT32 SCX(INT32 x)
 {
 	return FixedInt(FixedMul(x<<FRACBITS, vid.fdupx));
 }
+*/
 
 #if 0
 static INT32 SCR(INT32 r)
@@ -511,11 +519,12 @@ static INT32 SCR(INT32 r)
 #define ST_DrawPadNumFromHudWS(h,n,q) V_DrawPaddedTallNum(SCX(hudinfo[h+!!splitscreen].x), SCY(hudinfo[h+!!splitscreen].y), V_NOSCALESTART|V_HUDTRANS, n, q)
 #define ST_DrawPatchFromHudWS(h,p)    V_DrawScaledPatch(SCX(hudinfo[h+!!splitscreen].x), SCY(hudinfo[h+!!splitscreen].y), V_NOSCALESTART|V_HUDTRANS, p)
 
+/*
 // Draw a number, scaled, over the view, maybe with set translucency
 // Always draw the number completely since it's overlay
 //
 // Supports different colors! woo!
-static void ST_DrawNightsOverlayNum(INT32 x /* right border */, INT32 y, INT32 a,
+static void ST_DrawNightsOverlayNum(INT32 x, INT32 y, INT32 a,
 	INT32 num, patch_t **numpat, skincolors_t colornum)
 {
 	INT32 w = SHORT(numpat[0]->width);
@@ -541,6 +550,7 @@ static void ST_DrawNightsOverlayNum(INT32 x /* right border */, INT32 y, INT32 a
 
 	// Sorry chum, this function only draws UNSIGNED values!
 }
+*/
 
 // Devmode information
 static void ST_drawDebugInfo(void)
@@ -609,6 +619,7 @@ static void ST_drawDebugInfo(void)
 	}
 }
 
+/*
 static void ST_drawScore(void)
 {
 	// SCORE:
@@ -623,7 +634,9 @@ static void ST_drawScore(void)
 	else
 		ST_DrawNumFromHud(HUD_SCORENUM, stplyr->score);
 }
+*/
 
+/*
 static void ST_drawTime(void)
 {
 	INT32 seconds, minutes, tictrn, tics;
@@ -661,8 +674,10 @@ static void ST_drawTime(void)
 		}
 	}
 }
+*/
 
-static inline void ST_drawRings(void)
+/*
+static inline void ST_drawRings(void) // SRB2kart - unused.
 {
 	INT32 ringnum = max(stplyr->health-1, 0);
 
@@ -681,8 +696,10 @@ static inline void ST_drawRings(void)
 
 	ST_DrawNumFromHudWS(HUD_RINGSNUM, ringnum);
 }
+*/
 
-static void ST_drawLives(void)
+/*
+static void ST_drawLives(void) // SRB2kart - unused.
 {
 	const INT32 v_splitflag = (splitscreen && stplyr == &players[displayplayer] ? V_SPLITSCREEN : 0);
 
@@ -698,9 +715,9 @@ static void ST_drawLives(void)
 	{
 		// skincolor face/super
 		UINT8 *colormap = R_GetTranslationColormap(stplyr->skin, stplyr->mo->color, GTC_CACHE);
-		patch_t *face = faceprefix[stplyr->skin];
+		patch_t *face = facerankprefix[stplyr->skin];
 		if (stplyr->powers[pw_super] || stplyr->pflags & PF_NIGHTSMODE)
-			face = superprefix[stplyr->skin];
+			face = facewantprefix[stplyr->skin];
 		V_DrawSmallMappedPatch(hudinfo[HUD_LIVESPIC].x, hudinfo[HUD_LIVESPIC].y + (v_splitflag ? -12 : 0),
 			V_SNAPTOLEFT|V_SNAPTOBOTTOM|V_HUDTRANS|v_splitflag,face, colormap);
 	}
@@ -709,7 +726,7 @@ static void ST_drawLives(void)
 		// skincolor face
 		UINT8 *colormap = R_GetTranslationColormap(stplyr->skin, stplyr->skincolor, GTC_CACHE);
 		V_DrawSmallMappedPatch(hudinfo[HUD_LIVESPIC].x, hudinfo[HUD_LIVESPIC].y + (v_splitflag ? -12 : 0),
-			V_SNAPTOLEFT|V_SNAPTOBOTTOM|V_HUDTRANS|v_splitflag,faceprefix[stplyr->skin], colormap);
+			V_SNAPTOLEFT|V_SNAPTOBOTTOM|V_HUDTRANS|v_splitflag,facerankprefix[stplyr->skin], colormap);
 	}
 
 	// name
@@ -726,68 +743,85 @@ static void ST_drawLives(void)
 	V_DrawRightAlignedString(hudinfo[HUD_LIVESNUM].x, hudinfo[HUD_LIVESNUM].y + (v_splitflag ? -4 : 0),
 		V_SNAPTOLEFT|V_SNAPTOBOTTOM|V_HUDTRANS|v_splitflag, va("%d",stplyr->lives));
 }
+*/
 
 static void ST_drawLevelTitle(void)
 {
 	char *lvlttl = mapheaderinfo[gamemap-1]->lvlttl;
 	char *subttl = mapheaderinfo[gamemap-1]->subttl;
-	INT32 actnum = mapheaderinfo[gamemap-1]->actnum;
+	char *zonttl = mapheaderinfo[gamemap-1]->zonttl; // SRB2kart
+	char *actnum = mapheaderinfo[gamemap-1]->actnum;
 	INT32 lvlttlxpos;
-	INT32 subttlxpos = BASEVIDWIDTH/2;
 	INT32 ttlnumxpos;
 	INT32 zonexpos;
+	INT32 dupcalc = (vid.width/vid.dupx);
+	UINT8 gtc = G_GetGametypeColor(gametype);
+	INT32 sub = 0;
+	INT32 bary = (splitscreen)
+		? BASEVIDHEIGHT/2
+		: 163;
+	INT32 lvlw;
 
-	INT32 lvlttly;
-	INT32 zoney;
-
-	if (!(timeinmap > 2 && timeinmap-3 < 110))
+	if (timeinmap > 113)
 		return;
 
-	if (actnum > 0)
-	{
-		ttlnum = W_CachePatchName(va("TTL%.2d", actnum), PU_CACHE);
-		lvlttlxpos = ((BASEVIDWIDTH/2) - (V_LevelNameWidth(lvlttl)/2)) - SHORT(ttlnum->width);
-	}
-	else
-		lvlttlxpos = ((BASEVIDWIDTH/2) - (V_LevelNameWidth(lvlttl)/2));
+	lvlw = V_LevelNameWidth(lvlttl);
 
-	ttlnumxpos = lvlttlxpos + V_LevelNameWidth(lvlttl);
-	zonexpos = ttlnumxpos - V_LevelNameWidth(M_GetText("ZONE"));
+	if (actnum[0])
+		lvlttlxpos = ((BASEVIDWIDTH/2) - (lvlw/2)) - V_LevelNameWidth(actnum);
+	else
+		lvlttlxpos = ((BASEVIDWIDTH/2) - (lvlw/2));
+
+	zonexpos = ttlnumxpos = lvlttlxpos + lvlw;
+	if (!(mapheaderinfo[gamemap-1]->levelflags & LF_NOZONE))
+	{
+		if (zonttl[0])
+			zonexpos -= V_LevelNameWidth(zonttl); // SRB2kart
+		else
+			zonexpos -= V_LevelNameWidth(M_GetText("ZONE"));
+	}
 
 	if (lvlttlxpos < 0)
 		lvlttlxpos = 0;
 
-	// There's no consistent algorithm that can accurately define the old positions
-	// so I just ended up resorting to a single switct statement to define them
-	switch (timeinmap-3)
+	if (timeinmap > 105)
 	{
-		case 0:   zoney = 200; lvlttly =   0; break;
-		case 1:   zoney = 188; lvlttly =  12; break;
-		case 2:   zoney = 176; lvlttly =  24; break;
-		case 3:   zoney = 164; lvlttly =  36; break;
-		case 4:   zoney = 152; lvlttly =  48; break;
-		case 5:   zoney = 140; lvlttly =  60; break;
-		case 6:   zoney = 128; lvlttly =  72; break;
-		case 105: zoney =  80; lvlttly = 104; break;
-		case 106: zoney =  56; lvlttly = 128; break;
-		case 107: zoney =  32; lvlttly = 152; break;
-		case 108: zoney =   8; lvlttly = 176; break;
-		case 109: zoney =   0; lvlttly = 200; break;
-		default:  zoney = 104; lvlttly =  80; break;
+		INT32 count = (113 - (INT32)(timeinmap));
+		sub = dupcalc;
+		while (count-- > 0)
+			sub >>= 1;
+		sub = -sub;
 	}
 
-	if (actnum)
-		V_DrawScaledPatch(ttlnumxpos, zoney, 0, ttlnum);
+	{
+		dupcalc = (dupcalc - BASEVIDWIDTH)>>1;
+		V_DrawFill(sub - dupcalc, bary+9, ttlnumxpos+dupcalc + 1, 2, 31);
+		V_DrawDiag(sub + ttlnumxpos + 1, bary, 11, 31);
+		V_DrawFill(sub - dupcalc, bary, ttlnumxpos+dupcalc, 10, gtc);
+		V_DrawDiag(sub + ttlnumxpos, bary, 10, gtc);
 
-	V_DrawLevelTitle(lvlttlxpos, lvlttly, 0, lvlttl);
+		if (subttl[0])
+			V_DrawRightAlignedString(sub + zonexpos - 8, bary+1, V_ALLOWLOWERCASE, subttl);
+		//else
+			//V_DrawRightAlignedString(sub + zonexpos - 8, bary+1, V_ALLOWLOWERCASE, va("%s Mode", gametype_cons_t[gametype].strvalue));
+	}
 
-	if (!(mapheaderinfo[gamemap-1]->levelflags & LF_NOZONE))
-		V_DrawLevelTitle(zonexpos, zoney, 0, M_GetText("ZONE"));
+	ttlnumxpos += sub;
+	lvlttlxpos += sub;
+	zonexpos += sub;
 
-	if (lvlttly+48 < 200)
-		V_DrawCenteredString(subttlxpos, lvlttly+48, V_ALLOWLOWERCASE, subttl);
+	V_DrawLevelTitle(lvlttlxpos, bary-18, 0, lvlttl);
+
+	if (strlen(zonttl) > 0)
+		V_DrawLevelTitle(zonexpos, bary+6, 0, zonttl);
+	else if (!(mapheaderinfo[gamemap-1]->levelflags & LF_NOZONE))
+		V_DrawLevelTitle(zonexpos, bary+6, 0, M_GetText("ZONE"));
+
+	if (actnum[0])
+		V_DrawLevelTitle(ttlnumxpos+12, bary+6, 0, actnum);
 }
 
+/*
 static void ST_drawFirstPersonHUD(void)
 {
 	player_t *player = stplyr;
@@ -889,10 +923,12 @@ static void ST_drawFirstPersonHUD(void)
 		V_DrawScaledPatch(SCX((BASEVIDWIDTH/2) - (SHORT(p->width)/2) + SHORT(p->leftoffset)), SCY(60 - SHORT(p->topoffset)),
 			V_NOSCALESTART|V_OFFSET|V_TRANSLUCENT, p);
 }
+*/
 
+/*
 // [21:42] <+Rob> Beige - Lavender - Steel Blue - Peach - Orange - Purple - Silver - Yellow - Pink - Red - Blue - Green - Cyan - Gold
 static skincolors_t linkColor[14] =
-{SKINCOLOR_BEIGE,  SKINCOLOR_LAVENDER, SKINCOLOR_STEELBLUE, SKINCOLOR_PEACH, SKINCOLOR_ORANGE,
+{SKINCOLOR_BEIGE,  SKINCOLOR_LAVENDER, SKINCOLOR_STEEL, SKINCOLOR_PEACH, SKINCOLOR_ORANGE,
  SKINCOLOR_PURPLE, SKINCOLOR_SILVER,   SKINCOLOR_SUPER4,    SKINCOLOR_PINK,  SKINCOLOR_RED,
  SKINCOLOR_BLUE,   SKINCOLOR_GREEN,    SKINCOLOR_CYAN,      SKINCOLOR_GOLD};
 
@@ -942,7 +978,7 @@ static void ST_drawNightsRecords(void)
 		V_DrawString(BASEVIDWIDTH/2 - 48, STRINGY(148), aflag, "BONUS:");
 		V_DrawRightAlignedString(BASEVIDWIDTH/2 + 48, STRINGY(140), V_ORANGEMAP|aflag, va("%d", stplyr->finishedrings));
 		V_DrawRightAlignedString(BASEVIDWIDTH/2 + 48, STRINGY(148), V_ORANGEMAP|aflag, va("%d", stplyr->finishedrings * 50));
-		ST_DrawNightsOverlayNum(BASEVIDWIDTH/2 + 48, STRINGY(160), aflag, stplyr->lastmarescore, nightsnum, SKINCOLOR_STEELBLUE);
+		ST_DrawNightsOverlayNum(BASEVIDWIDTH/2 + 48, STRINGY(160), aflag, stplyr->lastmarescore, nightsnum, SKINCOLOR_STEEL);
 
 		// If new record, say so!
 		if (!(netgame || multiplayer) && G_GetBestNightsScore(gamemap, stplyr->lastmare + 1) <= stplyr->lastmarescore)
@@ -962,13 +998,15 @@ static void ST_drawNightsRecords(void)
 		}
 	}
 }
+*/
 
-static void ST_drawNiGHTSHUD(void)
+/*
+static void ST_drawNiGHTSHUD(void) // SRB2kart - unused.
 {
 	INT32 origamount;
 	INT32 minlink = 1;
 	INT32 total_ringcount;
-	boolean nosshack = false;
+	UINT8 nosshack = 0;
 
 	// When debugging, show "0 Link".
 	if (cv_debug & DBG_NIGHTSBASIC)
@@ -984,7 +1022,7 @@ static void ST_drawNiGHTSHUD(void)
 		if (stplyr != &players[displayplayer])
 			return;
 		nosshack = splitscreen;
-		splitscreen = false;
+		splitscreen = 0;
 	}
 
 	// Link drawing
@@ -1082,7 +1120,7 @@ static void ST_drawNiGHTSHUD(void)
 		}
 		else if (nosshack)
 		{ // Even dirtier hack-of-a-hack to draw seperate drill meters in splitscreen special stages but nothing else.
-			splitscreen = true;
+			splitscreen = nosshack;
 			V_DrawScaledPatch(locx, STRINGY(locy)-3, V_HUDTRANS, drillbar);
 			for (dfill = 0; dfill < stplyr->drillmeter/20 && dfill < 96; ++dfill)
 				V_DrawScaledPatch(locx + 2 + dfill, STRINGY(locy + 3), V_HUDTRANS, drillfill[fillpatch]);
@@ -1095,7 +1133,7 @@ static void ST_drawNiGHTSHUD(void)
 			for (dfill = 0; dfill < stplyr->drillmeter/20 && dfill < 96; ++dfill)
 				V_DrawScaledPatch(locx + 2 + dfill, STRINGY(locy + 3), V_SNAPTOBOTTOM|V_HUDTRANS, drillfill[fillpatch]);
 			stplyr = &players[displayplayer];
-			splitscreen = false;
+			splitscreen = 0;
 		}
 		else
 		{ // Draw normally. <:3
@@ -1137,7 +1175,7 @@ static void ST_drawNiGHTSHUD(void)
 		INT32 i;
 		total_ringcount = 0;
 		for (i = 0; i < MAXPLAYERS; i++)
-			if (playeringame[i] /*&& players[i].pflags & PF_NIGHTSMODE*/ && players[i].health)
+			if (playeringame[i] && players[i].pflags & PF_NIGHTSMODE && players[i].health)
 				total_ringcount += players[i].health - 1;
 	}
 	else
@@ -1224,7 +1262,7 @@ static void ST_drawNiGHTSHUD(void)
 #endif
 	)
 	{
-		ST_DrawNightsOverlayNum(304, STRINGY(16), SPLITFLAGS(V_SNAPTOTOP)|V_SNAPTORIGHT, stplyr->marescore, nightsnum, SKINCOLOR_STEELBLUE);
+		ST_DrawNightsOverlayNum(304, STRINGY(16), SPLITFLAGS(V_SNAPTOTOP)|V_SNAPTORIGHT, stplyr->marescore, nightsnum, SKINCOLOR_STEEL);
 	}
 
 	if (!stplyr->exiting
@@ -1339,10 +1377,11 @@ static void ST_drawNiGHTSHUD(void)
 #endif
 	ST_drawNightsRecords();
 
-	if (nosshack)
-		splitscreen = true;
+	splitscreen = nosshack;
 }
+*/
 
+/*
 static void ST_drawWeaponRing(powertype_t weapon, INT32 rwflag, INT32 wepflag, INT32 xoffs, patch_t *pat)
 {
 	INT32 txtflags = 0, patflags = 0;
@@ -1374,12 +1413,14 @@ static void ST_drawWeaponRing(powertype_t weapon, INT32 rwflag, INT32 wepflag, I
 	else if (stplyr->ringweapons & rwflag)
 		V_DrawScaledPatch(8 + xoffs, STRINGY(162), V_SNAPTOLEFT|V_TRANSLUCENT, pat);
 }
+*/
 
-static void ST_drawMatchHUD(void)
+/*
+static void ST_drawMatchHUD(void) // SRB2kart - unused.
 {
 	INT32 offset = (BASEVIDWIDTH / 2) - (NUM_WEAPONS * 10);
 
-	if (!G_RingSlingerGametype())
+	if (!G_BattleGametype())
 		return;
 
 	if (G_TagGametype() && !(stplyr->pflags & PF_TAGIT))
@@ -1454,16 +1495,18 @@ static void ST_drawMatchHUD(void)
 	}
 #endif
 }
+*/
 
-static inline void ST_drawRaceHUD(void)
+/*
+static inline void ST_drawRaceHUD(void) // SRB2kart - unused.
 {
-	if (leveltime > TICRATE && leveltime <= 2*TICRATE)
+	if (leveltime > starttime-(3*TICRATE) && leveltime <= starttime-(2*TICRATE))
 		V_DrawScaledPatch(SCX((BASEVIDWIDTH - SHORT(race3->width))/2), (INT32)(SCY(BASEVIDHEIGHT/2)), V_NOSCALESTART, race3);
-	else if (leveltime > 2*TICRATE && leveltime <= 3*TICRATE)
+	else if (leveltime > starttime-(2*TICRATE) && leveltime <= starttime-TICRATE)
 		V_DrawScaledPatch(SCX((BASEVIDWIDTH - SHORT(race2->width))/2), (INT32)(SCY(BASEVIDHEIGHT/2)), V_NOSCALESTART, race2);
-	else if (leveltime > 3*TICRATE && leveltime <= 4*TICRATE)
+	else if (leveltime > starttime-TICRATE && leveltime <= starttime)
 		V_DrawScaledPatch(SCX((BASEVIDWIDTH - SHORT(race1->width))/2), (INT32)(SCY(BASEVIDHEIGHT/2)), V_NOSCALESTART, race1);
-	else if (leveltime > 4*TICRATE && leveltime <= 5*TICRATE)
+	else if (leveltime > starttime && leveltime <= starttime+TICRATE)
 		V_DrawScaledPatch(SCX((BASEVIDWIDTH - SHORT(racego->width))/2), (INT32)(SCY(BASEVIDHEIGHT/2)), V_NOSCALESTART, racego);
 
 	if (circuitmap)
@@ -1474,8 +1517,10 @@ static inline void ST_drawRaceHUD(void)
 			V_DrawString(hudinfo[HUD_LAP].x, STRINGY(hudinfo[HUD_LAP].y), 0, va("Lap: %u/%d", stplyr->laps+1, cv_numlaps.value));
 	}
 }
+*/
 
-static void ST_drawTagHUD(void)
+/*
+static void ST_drawTagHUD(void) // SRB2kart - unused.
 {
 	char pstime[33] = "";
 	char pstext[33] = "";
@@ -1534,7 +1579,7 @@ static void ST_drawTagHUD(void)
 	}
 }
 
-static void ST_drawCTFHUD(void)
+static void ST_drawCTFHUD(void) // SRB2kart - unused.
 {
 	INT32 i;
 	UINT16 whichflag = 0;
@@ -1582,19 +1627,23 @@ static void ST_drawCTFHUD(void)
 		}
 	}
 }
+*/
 
 // Draws "Red Team", "Blue Team", or "Spectator" for team gametypes.
-static inline void ST_drawTeamName(void)
+/*
+static inline void ST_drawTeamName(void) // SRB2kart - unused.
 {
 	if (stplyr->ctfteam == 1)
-		V_DrawString(256, (splitscreen) ? STRINGY(184) : STRINGY(192), V_HUDTRANSHALF, "RED TEAM");
+		V_DrawString(256, splitscreen ? STRINGY(184) : STRINGY(192), V_HUDTRANSHALF, "RED TEAM");
 	else if (stplyr->ctfteam == 2)
-		V_DrawString(248, (splitscreen) ? STRINGY(184) : STRINGY(192), V_HUDTRANSHALF, "BLUE TEAM");
+		V_DrawString(248, splitscreen ? STRINGY(184) : STRINGY(192), V_HUDTRANSHALF, "BLUE TEAM");
 	else
-		V_DrawString(244, (splitscreen) ? STRINGY(184) : STRINGY(192), V_HUDTRANSHALF, "SPECTATOR");
+		V_DrawString(244, splitscreen ? STRINGY(184) : STRINGY(192), V_HUDTRANSHALF, "SPECTATOR");
 }
+*/
 
-static void ST_drawSpecialStageHUD(void)
+/*
+static void ST_drawSpecialStageHUD(void) // SRB2kart - unused.
 {
 	if (totalrings > 0)
 		ST_DrawNumFromHudWS(HUD_SS_TOTALRINGS, totalrings);
@@ -1613,7 +1662,9 @@ static void ST_drawSpecialStageHUD(void)
 	else
 		ST_DrawPatchFromHud(HUD_TIMEUP, timeup);
 }
+*/
 
+/*
 static INT32 ST_drawEmeraldHuntIcon(mobj_t *hunt, patch_t **patches, INT32 offset)
 {
 	INT32 interval, i;
@@ -1653,9 +1704,11 @@ static INT32 ST_drawEmeraldHuntIcon(mobj_t *hunt, patch_t **patches, INT32 offse
 	V_DrawScaledPatch(hudinfo[HUD_HUNTPICS].x+offset, STRINGY(hudinfo[HUD_HUNTPICS].y), V_HUDTRANS, patches[i]);
 	return interval;
 }
+*/
 
+/*
 // Separated a few things to stop the SOUND EFFECTS BLARING UGH SHUT UP AAAA
-static void ST_doHuntIconsAndSound(void)
+static void ST_doHuntIconsAndSound(void) // SRB2kart - unused.
 {
 	INT32 interval = 0, newinterval = 0;
 
@@ -1680,7 +1733,7 @@ static void ST_doHuntIconsAndSound(void)
 		S_StartSound(NULL, sfx_emfind);
 }
 
-static void ST_doItemFinderIconsAndSound(void)
+static void ST_doItemFinderIconsAndSound(void) // SRB2kart - unused.
 {
 	INT32 emblems[16];
 	thinker_t *th;
@@ -1739,12 +1792,14 @@ static void ST_doItemFinderIconsAndSound(void)
 	if (!(P_AutoPause() || paused) && interval > 0 && leveltime && leveltime % interval == 0)
 		S_StartSound(NULL, sfx_emfind);
 }
+*/
 
 // Draw the status bar overlay, customisable: the user chooses which
 // kind of information to overlay
 //
 static void ST_overlayDrawer(void)
 {
+	/* SRB2kart doesn't need this stuff
 	//hu_showscores = auto hide score/time/rings when tab rankings are shown
 	if (!(hu_showscores && (netgame || multiplayer)))
 	{
@@ -1772,9 +1827,10 @@ static void ST_overlayDrawer(void)
 				ST_drawLives();
 		}
 	}
+	*/
 
 	// GAME OVER pic
-	if (G_GametypeUsesLives() && stplyr->lives <= 0 && !(hu_showscores && (netgame || multiplayer)))
+	/*if (G_GametypeUsesLives() && stplyr->lives <= 0 && !(hu_showscores && (netgame || multiplayer)))
 	{
 		patch_t *p;
 
@@ -1784,17 +1840,18 @@ static void ST_overlayDrawer(void)
 			p = sboover;
 
 		V_DrawScaledPatch((BASEVIDWIDTH - SHORT(p->width))/2, STRINGY(BASEVIDHEIGHT/2 - (SHORT(p->height)/2)), 0, p);
-	}
-
+	}*/
 
 	if (!hu_showscores) // hide the following if TAB is held
 	{
 		// Countdown timer for Race Mode
-		if (countdown)
-			V_DrawCenteredString(BASEVIDWIDTH/2, STRINGY(176), 0, va("%d", countdown/TICRATE));
+		// ...moved to k_kart.c so we can take advantage of the LAPS_Y value
 
+		K_drawKartHUD();
+
+		/* SRB2kart doesn't need this stuff, I think
 		// If you are in overtime, put a big honkin' flashin' message on the screen.
-		if (G_RingSlingerGametype() && cv_overtime.value
+		if (G_BattleGametype() && cv_overtime.value
 			&& (leveltime > (timelimitintics + TICRATE/2)) && cv_timelimit.value && (leveltime/TICRATE % 2 == 0))
 		{
 			if (splitscreen)
@@ -1835,24 +1892,27 @@ static void ST_overlayDrawer(void)
 
 		if (stplyr->powers[pw_gravityboots] > 3*TICRATE || (stplyr->powers[pw_gravityboots] && leveltime & 1))
 			V_DrawScaledPatch(hudinfo[HUD_GRAVBOOTSICO].x, STRINGY(hudinfo[HUD_GRAVBOOTSICO].y), V_SNAPTORIGHT, gravboots);
+		*/
 
 		if(!P_IsLocalPlayer(stplyr))
 		{
-			char name[MAXPLAYERNAME+1];
+			/*char name[MAXPLAYERNAME+1];
 			// shorten the name if its more than twelve characters.
-			strlcpy(name, player_names[stplyr-players], 13);
+			strlcpy(name, player_names[stplyr-players], 13);*/
 
 			// Show name of player being displayed
-			V_DrawCenteredString((BASEVIDWIDTH/6), BASEVIDHEIGHT-80, 0, M_GetText("Viewpoint:"));
-			V_DrawCenteredString((BASEVIDWIDTH/6), BASEVIDHEIGHT-64, V_ALLOWLOWERCASE, name);
+			V_DrawCenteredString((BASEVIDWIDTH/2), BASEVIDHEIGHT-40, 0, M_GetText("Viewpoint:"));
+			V_DrawCenteredString((BASEVIDWIDTH/2), BASEVIDHEIGHT-32, V_ALLOWLOWERCASE, player_names[stplyr-players]);
 		}
 
 		// This is where we draw all the fun cheese if you have the chasecam off!
-		if ((stplyr == &players[displayplayer] && !camera.chase)
-			|| ((splitscreen && stplyr == &players[secondarydisplayplayer]) && !camera2.chase))
+		/*if ((stplyr == &players[displayplayer] && !camera.chase)
+			|| ((splitscreen && stplyr == &players[secondarydisplayplayer]) && !camera2.chase)
+			|| ((splitscreen > 1 && stplyr == &players[thirddisplayplayer]) && !camera3.chase)
+			|| ((splitscreen > 2 && stplyr == &players[fourthdisplayplayer]) && !camera4.chase))
 		{
 			ST_drawFirstPersonHUD();
-		}
+		}*/
 	}
 
 #ifdef HAVE_BLUA
@@ -1861,24 +1921,24 @@ static void ST_overlayDrawer(void)
 #endif
 
 	// draw level title Tails
-	if (*mapheaderinfo[gamemap-1]->lvlttl != '\0' && !(hu_showscores && (netgame || multiplayer))
+	if (*mapheaderinfo[gamemap-1]->lvlttl != '\0' && !(hu_showscores && (netgame || multiplayer) && !mapreset)
 #ifdef HAVE_BLUA
 	&& LUA_HudEnabled(hud_stagetitle)
 #endif
 	)
 		ST_drawLevelTitle();
 
-	if (!hu_showscores && !splitscreen && netgame && displayplayer == consoleplayer)
+	if (!hu_showscores && netgame && !mapreset)
 	{
-		if (G_GametypeUsesLives() && stplyr->lives <= 0 && countdown != 1)
-			V_DrawCenteredString(BASEVIDWIDTH/2, STRINGY(132), 0, M_GetText("Press F12 to watch another player."));
+		/*if (G_GametypeUsesLives() && stplyr->lives <= 0 && countdown != 1)
+			V_DrawCenteredString(BASEVIDWIDTH/2, STRINGY(132), 0, M_GetText("Press Viewpoint Key to watch a player."));
 		else if (gametype == GT_HIDEANDSEEK &&
 		 (!stplyr->spectator && !(stplyr->pflags & PF_TAGIT)) && (leveltime > hidetime * TICRATE))
 		{
 			V_DrawCenteredString(BASEVIDWIDTH/2, STRINGY(116), 0, M_GetText("You cannot move while hiding."));
-			V_DrawCenteredString(BASEVIDWIDTH/2, STRINGY(132), 0, M_GetText("Press F12 to watch another player."));
+			V_DrawCenteredString(BASEVIDWIDTH/2, STRINGY(132), 0, M_GetText("Press Viewpoint Key to watch a player."));
 		}
-		else if (!G_PlatformGametype() && stplyr->playerstate == PST_DEAD && stplyr->lives) //Death overrides spectator text.
+		else if (!G_RaceGametype() && stplyr->playerstate == PST_DEAD && stplyr->lives) //Death overrides spectator text.
 		{
 			INT32 respawntime = cv_respawntime.value - stplyr->deadtimer/TICRATE;
 			if (respawntime > 0 && !stplyr->spectator)
@@ -1886,31 +1946,68 @@ static void ST_overlayDrawer(void)
 			else
 				V_DrawCenteredString(BASEVIDWIDTH/2, STRINGY(132), V_HUDTRANSHALF, M_GetText("Press Jump to respawn."));
 		}
-		else if (stplyr->spectator
+		else*/ if (stplyr->spectator
 #ifdef HAVE_BLUA
 		&& LUA_HudEnabled(hud_textspectator)
 #endif
 		)
 		{
-			V_DrawCenteredString(BASEVIDWIDTH/2, STRINGY(60), V_HUDTRANSHALF, M_GetText("You are a spectator."));
-			if (G_GametypeHasTeams())
-				V_DrawCenteredString(BASEVIDWIDTH/2, STRINGY(132), V_HUDTRANSHALF, M_GetText("Press Fire to be assigned to a team."));
-			else if (G_IsSpecialStage(gamemap) && useNightsSS)
-				V_DrawCenteredString(BASEVIDWIDTH/2, STRINGY(132), V_HUDTRANSHALF, M_GetText("You cannot join the game until the stage has ended."));
+			const char *itemtxt = M_GetText("Item - Join Game");
+
+			if (stplyr->powers[pw_flashing])
+				itemtxt = M_GetText("Item - . . .");
+			else if (stplyr->pflags & PF_WANTSTOJOIN)
+				itemtxt = M_GetText("Item - Cancel Join");
+			else if (G_GametypeHasTeams())
+				itemtxt = M_GetText("Item - Join Team");
+
+			if (cv_ingamecap.value)
+			{
+				UINT8 numingame = 0;
+				UINT8 i;
+
+				for (i = 0; i < MAXPLAYERS; i++)
+					if (playeringame[i] && !players[i].spectator)
+						numingame++;
+
+				itemtxt = va("%s (%s: %d)", itemtxt, M_GetText("Slots left"), max(0, cv_ingamecap.value - numingame));
+			}
+
+			// SRB2kart: changed positions & text
+			if (splitscreen)
+			{
+				INT32 splitflags = K_calcSplitFlags(0);
+				V_DrawThinString(2, (BASEVIDHEIGHT/2)-20, V_YELLOWMAP|V_HUDTRANSHALF|splitflags, M_GetText("- SPECTATING -"));
+				V_DrawThinString(2, (BASEVIDHEIGHT/2)-10, V_HUDTRANSHALF|splitflags, itemtxt);
+			}
 			else
-				V_DrawCenteredString(BASEVIDWIDTH/2, STRINGY(132), V_HUDTRANSHALF, M_GetText("Press Fire to enter the game."));
-			V_DrawCenteredString(BASEVIDWIDTH/2, STRINGY(148), V_HUDTRANSHALF, M_GetText("Press F12 to watch another player."));
-			V_DrawCenteredString(BASEVIDWIDTH/2, STRINGY(164), V_HUDTRANSHALF, M_GetText("Press Jump to float and Spin to sink."));
+			{
+				V_DrawString(2, BASEVIDHEIGHT-40, V_HUDTRANSHALF|V_YELLOWMAP, M_GetText("- SPECTATING -"));
+				V_DrawString(2, BASEVIDHEIGHT-30, V_HUDTRANSHALF, itemtxt);
+				V_DrawString(2, BASEVIDHEIGHT-20, V_HUDTRANSHALF, M_GetText("Accelerate - Float"));
+				V_DrawString(2, BASEVIDHEIGHT-10, V_HUDTRANSHALF, M_GetText("Brake - Sink"));
+			}
 		}
 	}
 
 	ST_drawDebugInfo();
 }
 
+// MayonakaStatic: draw Midnight Channel's TV-like borders
+static void ST_MayonakaStatic(void)
+{
+	INT32 flag = (leveltime%2) ? V_90TRANS : V_70TRANS;
+
+	V_DrawFixedPatch(0, 0, FRACUNIT, V_SNAPTOTOP|V_SNAPTOLEFT|flag, hud_tv1, NULL);
+	V_DrawFixedPatch(320<<FRACBITS, 0, FRACUNIT, V_SNAPTOTOP|V_SNAPTORIGHT|V_FLIP|flag, hud_tv1, NULL);
+	V_DrawFixedPatch(0, 142<<FRACBITS, FRACUNIT, V_SNAPTOBOTTOM|V_SNAPTOLEFT|flag, hud_tv2, NULL);
+	V_DrawFixedPatch(320<<FRACBITS, 142<<FRACBITS, FRACUNIT, V_SNAPTOBOTTOM|V_SNAPTORIGHT|V_FLIP|flag, hud_tv2, NULL);
+}
+
 void ST_Drawer(void)
 {
 #ifdef SEENAMES
-	if (cv_seenames.value && cv_allowseenames.value && displayplayer == consoleplayer && seenplayer && seenplayer->mo)
+	if (cv_seenames.value && cv_allowseenames.value && displayplayer == consoleplayer && seenplayer && seenplayer->mo && !mapreset)
 	{
 		if (cv_seenames.value == 1)
 			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT/2 + 15, V_HUDTRANSHALF, player_names[seenplayer-players]);
@@ -1919,7 +2016,7 @@ void ST_Drawer(void)
 			va("%s%s", G_GametypeHasTeams() ? ((seenplayer->ctfteam == 1) ? "\x85" : "\x84") : "", player_names[seenplayer-players]));
 		else //if (cv_seenames.value == 3)
 			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT/2 + 15, V_HUDTRANSHALF,
-			va("%s%s", !G_RingSlingerGametype() || (G_GametypeHasTeams() && players[consoleplayer].ctfteam == seenplayer->ctfteam)
+			va("%s%s", !G_BattleGametype() || (G_GametypeHasTeams() && players[consoleplayer].ctfteam == seenplayer->ctfteam)
 			 ? "\x83" : "\x85", player_names[seenplayer-players]));
 	}
 #endif
@@ -1951,6 +2048,30 @@ void ST_Drawer(void)
 		{
 			stplyr = &players[secondarydisplayplayer];
 			ST_overlayDrawer();
+
+			if (splitscreen > 1)
+			{
+				stplyr = &players[thirddisplayplayer];
+				ST_overlayDrawer();
+
+				if (splitscreen > 2)
+				{
+					stplyr = &players[fourthdisplayplayer];
+					ST_overlayDrawer();
+				}
+			}
 		}
+		// draw Midnight Channel's overlay ontop
+		if (mapheaderinfo[gamemap-1]->typeoflevel & TOL_TV)	// Very specific Midnight Channel stuff.
+			ST_MayonakaStatic();
+	}
+
+	// Draw a white fade on level opening
+	if (timeinmap < 15)
+	{
+		if (timeinmap <= 5)
+			V_DrawFill(0,0,BASEVIDWIDTH,BASEVIDHEIGHT,120); // Pure white on first few frames, to hide SRB2's awful level load artifacts
+		else
+			V_DrawFadeScreen(120, 15-timeinmap); // Then gradually fade out from there
 	}
 }

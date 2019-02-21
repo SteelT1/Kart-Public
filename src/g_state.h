@@ -1,7 +1,7 @@
 // SONIC ROBO BLAST 2
 //-----------------------------------------------------------------------------
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -23,6 +23,7 @@ typedef enum
 	// Fadable gamestates
 	GS_LEVEL,           // Playing, in a level.
 	GS_INTERMISSION,    // Gazing at the intermission screen.
+	GS_VOTING,          // SRB2Kart: MP voting screen
 	GS_CONTINUING,      // continue screen
 
 	GS_TITLESCREEN,     // title screen
@@ -47,6 +48,7 @@ typedef enum
 	ga_worlddone,
 	ga_startcont,
 	ga_continued,
+	ga_startvote,
 } gameaction_t;
 
 extern gamestate_t gamestate;

@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -21,6 +21,7 @@
 #include "m_random.h"
 #include "lua_script.h"
 #include "lua_hook.h"
+#include "k_kart.h"
 
 // Object place
 #include "m_cheat.h"
@@ -56,12 +57,12 @@ void Command_Numthinkers_f(void)
 		CONS_Printf(M_GetText("numthinkers <#>: Count number of thinkers\n"));
 		CONS_Printf(
 			"\t1: P_MobjThinker\n"
-			"\t2: P_RainThinker\n"
-			"\t3: P_SnowThinker\n"
-			"\t4: P_NullPrecipThinker\n"
-			"\t5: T_Friction\n"
-			"\t6: T_Pusher\n"
-			"\t7: P_RemoveThinkerDelayed\n");
+			/*"\t2: P_RainThinker\n"
+			"\t3: P_SnowThinker\n"*/
+			"\t2: P_NullPrecipThinker\n"
+			"\t3: T_Friction\n"
+			"\t4: T_Pusher\n"
+			"\t5: P_RemoveThinkerDelayed\n");
 		return;
 	}
 
@@ -73,27 +74,27 @@ void Command_Numthinkers_f(void)
 			action = (actionf_p1)P_MobjThinker;
 			CONS_Printf(M_GetText("Number of %s: "), "P_MobjThinker");
 			break;
-		case 2:
+		/*case 2:
 			action = (actionf_p1)P_RainThinker;
 			CONS_Printf(M_GetText("Number of %s: "), "P_RainThinker");
 			break;
 		case 3:
 			action = (actionf_p1)P_SnowThinker;
 			CONS_Printf(M_GetText("Number of %s: "), "P_SnowThinker");
-			break;
-		case 4:
+			break;*/
+		case 2:
 			action = (actionf_p1)P_NullPrecipThinker;
 			CONS_Printf(M_GetText("Number of %s: "), "P_NullPrecipThinker");
 			break;
-		case 5:
+		case 3:
 			action = (actionf_p1)T_Friction;
 			CONS_Printf(M_GetText("Number of %s: "), "T_Friction");
 			break;
-		case 6:
+		case 4:
 			action = (actionf_p1)T_Pusher;
 			CONS_Printf(M_GetText("Number of %s: "), "T_Pusher");
 			break;
-		case 7:
+		case 5:
 			action = (actionf_p1)P_RemoveThinkerDelayed;
 			CONS_Printf(M_GetText("Number of %s: "), "P_RemoveThinkerDelayed");
 			break;
@@ -179,6 +180,7 @@ void Command_CountMobjs_f(void)
 void P_InitThinkers(void)
 {
 	thinkercap.prev = thinkercap.next = &thinkercap;
+	waypointcap = NULL;
 }
 
 //
@@ -308,7 +310,7 @@ static inline void P_RunThinkers(void)
 //
 // Determine if the teams are unbalanced, and if so, move a player to the other team.
 //
-static void P_DoAutobalanceTeams(void)
+/*static void P_DoAutobalanceTeams(void)
 {
 	changeteam_union NetPacket;
 	UINT16 usvalue;
@@ -447,7 +449,7 @@ static inline void P_DoSpecialStageStuff(void)
 		{
 			if (playeringame[i])
 			{
-				players[i].exiting = (14*TICRATE)/5 + 1;
+				players[i].exiting = raceexittime+1;
 				players[i].pflags &= ~PF_GLIDING;
 			}
 
@@ -484,7 +486,7 @@ static inline void P_DoSpecialStageStuff(void)
 				if (playeringame[i])
 				{
 					players[i].mo->momx = players[i].mo->momy = 0;
-					players[i].exiting = (14*TICRATE)/5 + 1;
+					players[i].exiting = raceexittime+1;
 				}
 
 			sstimer = 0;
@@ -560,7 +562,7 @@ static inline void P_DoCTFStuff(void)
 		if (cv_teamscramble.value && server)
 			P_DoTeamscrambling();
 	}
-}
+}*/
 
 //
 // P_Ticker
@@ -590,7 +592,7 @@ void P_Ticker(boolean run)
 	if (paused || P_AutoPause())
 		return;
 
-	postimgtype = postimgtype2 = postimg_none;
+	postimgtype = postimgtype2 = postimgtype3 = postimgtype4 = postimg_none;
 
 	P_MapStart();
 
@@ -607,13 +609,14 @@ void P_Ticker(boolean run)
 	}
 
 	// Keep track of how long they've been playing!
-	totalplaytime++;
+	if (!demoplayback) // Don't increment if a demo is playing.
+		totalplaytime++;
 
-	if (!useNightsSS && G_IsSpecialStage(gamemap))
+	/*if (!useNightsSS && G_IsSpecialStage(gamemap))
 		P_DoSpecialStageStuff();
 
 	if (runemeraldmanager)
-		P_EmeraldManager(); // Power stone mode
+		P_EmeraldManager(); // Power stone mode*/
 
 	if (run)
 	{
@@ -630,8 +633,10 @@ void P_Ticker(boolean run)
 	}
 
 	// Run shield positioning
-	P_RunShields();
+	//P_RunShields();
 	P_RunOverlays();
+
+	P_RunShadows();
 
 	P_UpdateSpecials();
 	P_RespawnSpecials();
@@ -643,11 +648,11 @@ void P_Ticker(boolean run)
 		leveltime++;
 	timeinmap++;
 
-	if (G_TagGametype())
+	/*if (G_TagGametype())
 		P_DoTagStuff();
 
 	if (G_GametypeHasTeams())
-		P_DoCTFStuff();
+		P_DoCTFStuff();*/
 
 	if (run)
 	{
@@ -673,6 +678,15 @@ void P_Ticker(boolean run)
 		if (countdown2)
 			countdown2--;
 
+		if (indirectitemcooldown)
+			indirectitemcooldown--;
+
+		if (G_BattleGametype())
+		{
+			if (wantedcalcdelay && --wantedcalcdelay <= 0)
+				K_CalculateBattleWanted();
+		}
+
 		if (quake.time)
 		{
 			fixed_t ir = quake.intensity>>1;
@@ -695,7 +709,22 @@ void P_Ticker(boolean run)
 			G_ConsGhostTic();
 		if (modeattacking)
 			G_GhostTicker();
+
+		if (mapreset > 1
+			&& --mapreset <= 1
+			&& server) // Remember: server uses it for mapchange, but EVERYONE ticks down for the animation
+				D_MapChange(gamemap, gametype, encoremode, true, 0, false, false);
 	}
+
+	// Always move the camera.
+	if (camera.chase)
+		P_MoveChaseCamera(&players[displayplayer], &camera, false);
+	if (splitscreen && camera2.chase)
+		P_MoveChaseCamera(&players[secondarydisplayplayer], &camera2, false);
+	if (splitscreen > 1 && camera3.chase)
+		P_MoveChaseCamera(&players[thirddisplayplayer], &camera3, false);
+	if (splitscreen > 2 && camera4.chase)
+		P_MoveChaseCamera(&players[fourthdisplayplayer], &camera4, false);
 
 	P_MapEnd();
 
@@ -708,7 +737,7 @@ void P_PreTicker(INT32 frames)
 	INT32 i,framecnt;
 	ticcmd_t temptic;
 
-	postimgtype = postimgtype2 = postimg_none;
+	postimgtype = postimgtype2 = postimgtype3 = postimgtype4 = postimg_none;
 
 	for (framecnt = 0; framecnt < frames; ++framecnt)
 	{
@@ -742,7 +771,7 @@ void P_PreTicker(INT32 frames)
 #endif
 
 		// Run shield positioning
-		P_RunShields();
+		//P_RunShields();
 		P_RunOverlays();
 
 		P_UpdateSpecials();

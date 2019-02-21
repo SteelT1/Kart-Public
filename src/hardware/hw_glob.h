@@ -27,6 +27,9 @@
 // the original aspect ratio of Doom graphics isn't square
 #define ORIGINAL_ASPECT (320.0f/200.0f)
 
+// Uncomment this to enable the OpenGL loading screen
+//#define HWR_LOADING_SCREEN
+
 // -----------
 // structures
 // -----------
@@ -78,6 +81,7 @@ typedef struct gr_vissprite_s
    //Hurdler: 25/04/2000: now support colormap in hardware mode
 	UINT8 *colormap;
 	INT32 dispoffset; // copy of info->dispoffset, affects ordering but not drawing
+	float z1, z2;
 } gr_vissprite_t;
 
 // --------

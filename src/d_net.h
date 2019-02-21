@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -19,9 +19,10 @@
 #define __D_NET__
 
 // Max computers in a game
-#define MAXNETNODES 32
+#define MAXNETNODES 16
 #define BROADCASTADDR MAXNETNODES
-#define MAXSPLITSCREENPLAYERS 2 // Max number of players on a single computer
+#define MAXSPLITSCREENPLAYERS 4 // Max number of players on a single computer
+#define NETSPLITSCREEN // Kart's splitscreen netgame feature
 
 #define STATLENGTH (TICRATE*2)
 
@@ -36,6 +37,8 @@ extern INT64 sendbytes; // Realtime updated
 
 extern SINT8 nodetoplayer[MAXNETNODES];
 extern SINT8 nodetoplayer2[MAXNETNODES]; // Say the numplayer for this node if any (splitscreen)
+extern SINT8 nodetoplayer3[MAXNETNODES]; // Say the numplayer for this node if any (splitscreen == 2)
+extern SINT8 nodetoplayer4[MAXNETNODES]; // Say the numplayer for this node if any (splitscreen == 3)
 extern UINT8 playerpernode[MAXNETNODES]; // Used specially for splitscreen
 extern boolean nodeingame[MAXNETNODES]; // Set false as nodes leave game
 

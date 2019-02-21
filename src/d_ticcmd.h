@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -21,26 +21,24 @@
 #pragma interface
 #endif
 
+#define MAXPREDICTTICS 12
+
 // Button/action code definitions.
 typedef enum
 {
-	// First 4 bits are weapon change info, DO NOT USE!
-	BT_WEAPONMASK = 0x0F, //our first four bits.
+	BT_ACCELERATE	= 1,		// Accelerate
+	BT_DRIFT		= 1<<2,		// Drift (direction is cmd->driftturn)
+	BT_BRAKE		= 1<<3,		// Brake
+	BT_ATTACK		= 1<<4,		// Use Item
+	BT_FORWARD		= 1<<5,		// Aim Item Forward
+	BT_BACKWARD		= 1<<6,		// Aim Item Backward
 
-	BT_WEAPONNEXT = 1<<4,
-	BT_WEAPONPREV = 1<<5,
+	// free: 1<<7 to 1<<12
 
-	BT_ATTACK     = 1<<6, // shoot rings
-	BT_USE        = 1<<7, // spin
-	BT_CAMLEFT    = 1<<8, // turn camera left
-	BT_CAMRIGHT   = 1<<9, // turn camera right
-	BT_TOSSFLAG   = 1<<10,
-	BT_JUMP       = 1<<11,
-	BT_FIRENORMAL = 1<<12, // Fire a normal ring no matter what
-
-	BT_CUSTOM1    = 1<<13,
-	BT_CUSTOM2    = 1<<14,
-	BT_CUSTOM3    = 1<<15,
+	// Lua garbage
+	BT_CUSTOM1		= 1<<13,
+	BT_CUSTOM2		= 1<<14,
+	BT_CUSTOM3		= 1<<15,
 } buttoncode_t;
 
 // The data sampled per tick (single player)
@@ -63,6 +61,8 @@ typedef struct
 	INT16 angleturn; // <<16 for angle delta - saved as 1 byte into demos
 	INT16 aiming; // vertical aiming, see G_BuildTicCmd
 	UINT16 buttons;
+	INT16 driftturn; // SRB2Kart: Used for getting drift turn speed
+	UINT8 latency; // Netgames: how many tics ago was this ticcmd generated from this player's end?
 } ATTRPACK ticcmd_t;
 
 #if defined(_MSC_VER)

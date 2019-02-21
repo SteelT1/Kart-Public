@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -27,6 +27,8 @@ typedef enum
 	ev_joystick,
 	ev_mouse2,
 	ev_joystick2,
+	ev_joystick3,
+	ev_joystick4,
 } evtype_t;
 
 // Event structure.

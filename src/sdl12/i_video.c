@@ -150,7 +150,7 @@ boolean highcolor = false;
 #if defined(DC) || (defined(GP2X) && !defined(HAVE_GP2XSDL))
 consvar_t cv_vidwait = {"vid_wait", "Off", CV_SAVE, CV_OnOff, NULL, 0, NULL, NULL, 0, 0, NULL};
 #else
-consvar_t cv_vidwait = {"vid_wait", "On", CV_SAVE, CV_OnOff, NULL, 0, NULL, NULL, 0, 0, NULL};
+consvar_t cv_vidwait = {"vid_wait", "Off", CV_SAVE, CV_OnOff, NULL, 0, NULL, NULL, 0, 0, NULL};
 #endif
 static consvar_t cv_stretch = {"stretch", "Off", CV_SAVE|CV_NOSHOWHELP, CV_OnOff, NULL, 0, NULL, NULL, 0, 0, NULL};
 
@@ -1311,7 +1311,6 @@ static inline boolean I_SkipFrame(void)
 		case GS_LEVEL:
 			if (!paused)
 				return false;
-		case GS_TIMEATTACK:
 		case GS_WAITINGPLAYERS:
 			return skip; // Skip odd frames
 		default:
@@ -1745,7 +1744,7 @@ INT32 VID_SetMode(INT32 modeNum)
 	BitsPerPixel = (Uint8)cv_scr_depth.value;
 	//vid.bpp = BitsPerPixel==8?1:2;
 	// Window title
-	SDL_WM_SetCaption("SRB2 "VERSIONSTRING, "SRB2");
+	SDL_WM_SetCaption("SRB2Kart "VERSIONSTRING, "SRB2Kart");
 
 	if (render_soft == rendermode)
 	{
@@ -1933,9 +1932,9 @@ void I_StartupGraphics(void)
 
 	// Window title
 #ifdef _WIN32_WCE
-	SDL_WM_SetCaption("SRB2 "VERSIONSTRING, "SRB2");
+	SDL_WM_SetCaption("SRB2Kart "VERSIONSTRING, "SRB2Kart");
 #else
-	SDL_WM_SetCaption("SRB2: Starting up", "SRB2");
+	SDL_WM_SetCaption("SRB2Kart: Starting up", "SRB2Kart");
 #endif
 
 	// Window icon
@@ -1972,6 +1971,7 @@ void I_StartupGraphics(void)
 #ifdef SHUFFLE
 		HWD.pfnPostImgRedraw    = hwSym("PostImgRedraw",NULL);
 #endif
+		HWD.pfnFlushScreenTextures=hwSym("FlushScreenTextures",NULL);
 		HWD.pfnStartScreenWipe  = hwSym("StartScreenWipe",NULL);
 		HWD.pfnEndScreenWipe    = hwSym("EndScreenWipe",NULL);
 		HWD.pfnDoScreenWipe     = hwSym("DoScreenWipe",NULL);

@@ -1,7 +1,7 @@
 // SONIC ROBO BLAST 2
 //-----------------------------------------------------------------------------
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -24,6 +24,14 @@
 //  one that defines the actual packets to
 //  be transmitted.
 
+// SOME numpty changed all the gametype constants and it fell out of sync with vanilla and now we have to pretend to be vanilla when talking to the master server...
+#define VANILLA_GT_RACE 2
+#if VERSION < 210
+#define VANILLA_GT_MATCH 1
+#else
+#define VANILLA_GT_MATCH 3
+#endif
+
 // Networking and tick handling related.
 #define BACKUPTICS 32
 #define MAXTEXTCMD 256
@@ -32,29 +40,29 @@
 //
 typedef enum
 {
-	PT_NOTHING,        // To send a nop through the network. ^_~
-	PT_SERVERCFG,      // Server config used in start game
-	                   // (must stay 1 for backwards compatibility).
-	                   // This is a positive response to a CLIENTJOIN request.
-	PT_CLIENTCMD,      // Ticcmd of the client.
-	PT_CLIENTMIS,      // Same as above with but saying resend from.
-	PT_CLIENT2CMD,     // 2 cmds in the packet for splitscreen.
-	PT_CLIENT2MIS,     // Same as above with but saying resend from
-	PT_NODEKEEPALIVE,  // Same but without ticcmd and consistancy
+	PT_NOTHING,       // To send a nop through the network. ^_~
+	PT_SERVERCFG,     // Server config used in start game
+	                  // (must stay 1 for backwards compatibility).
+	                  // This is a positive response to a CLIENTJOIN request.
+	PT_CLIENTCMD,     // Ticcmd of the client.
+	PT_CLIENTMIS,     // Same as above with but saying resend from.
+	PT_CLIENT2CMD,    // 2 cmds in the packet for splitscreen.
+	PT_CLIENT2MIS,    // Same as above with but saying resend from
+	PT_NODEKEEPALIVE, // Same but without ticcmd and consistancy
 	PT_NODEKEEPALIVEMIS,
-	PT_SERVERTICS,     // All cmds for the tic.
-	PT_SERVERREFUSE,   // Server refuses joiner (reason inside).
+	PT_SERVERTICS,    // All cmds for the tic.
+	PT_SERVERREFUSE,  // Server refuses joiner (reason inside).
 	PT_SERVERSHUTDOWN,
-	PT_CLIENTQUIT,     // Client closes the connection.
+	PT_CLIENTQUIT,    // Client closes the connection.
 
-	PT_ASKINFO,        // Anyone can ask info of the server.
-	PT_SERVERINFO,     // Send game & server info (gamespy).
-	PT_PLAYERINFO,     // Send information for players in game (gamespy).
-	PT_REQUESTFILE,    // Client requests a file transfer
-	PT_ASKINFOVIAMS,   // Packet from the MS requesting info be sent to new client.
-	                   // If this ID changes, update masterserver definition.
-	PT_RESYNCHEND,     // Player is now resynched and is being requested to remake the gametic
-	PT_RESYNCHGET,     // Player got resynch packet
+	PT_ASKINFO,       // Anyone can ask info of the server.
+	PT_SERVERINFO,    // Send game & server info (gamespy).
+	PT_PLAYERINFO,    // Send information for players in game (gamespy).
+	PT_REQUESTFILE,   // Client requests a file transfer
+	PT_ASKINFOVIAMS,  // Packet from the MS requesting info be sent to new client.
+	                  // If this ID changes, update masterserver definition.
+	PT_RESYNCHEND,    // Player is now resynched and is being requested to remake the gametic
+	PT_RESYNCHGET,    // Player got resynch packet
 
 	// Add non-PT_CANFAIL packet types here to avoid breaking MS compatibility.
 
@@ -64,20 +72,29 @@ typedef enum
 	PT_HASLUAFILE,     // Client telling the server they have the file
 #endif
 
-	PT_CANFAIL,        // This is kind of a priority. Anything bigger than CANFAIL
-	                   // allows HSendPacket(*, true, *, *) to return false.
-	                   // In addition, this packet can't occupy all the available slots.
+	// Kart-specific packets
+	PT_CLIENT3CMD,    // 3P
+	PT_CLIENT3MIS,
+	PT_CLIENT4CMD,    // 4P
+	PT_CLIENT4MIS,
+	PT_BASICKEEPALIVE,// Keep the network alive during wipes, as tics aren't advanced and NetUpdate isn't called
+
+	PT_CANFAIL,       // This is kind of a priority. Anything bigger than CANFAIL
+	                  // allows HSendPacket(*, true, *, *) to return false.
+	                  // In addition, this packet can't occupy all the available slots.
 
 	PT_FILEFRAGMENT = PT_CANFAIL, // A part of a file.
 
-	PT_TEXTCMD,        // Extra text commands from the client.
-	PT_TEXTCMD2,       // Splitscreen text commands.
-	PT_CLIENTJOIN,     // Client wants to join; used in start game.
-	PT_NODETIMEOUT,    // Packet sent to self if the connection times out.
-	PT_RESYNCHING,     // Packet sent to resync players.
-	                   // Blocks game advance until synched.
+	PT_TEXTCMD,       // Extra text commands from the client.
+	PT_TEXTCMD2,      // Splitscreen text commands.
+	PT_TEXTCMD3,      // 3P
+	PT_TEXTCMD4,      // 4P
+	PT_CLIENTJOIN,    // Client wants to join; used in start game.
+	PT_NODETIMEOUT,   // Packet sent to self if the connection times out.
+	PT_RESYNCHING,    // Packet sent to resync players.
+	                  // Blocks game advance until synched.
 #ifdef NEWPING
-	PT_PING,           // Packet sent to tell clients the other client's latency to server.
+	PT_PING,          // Packet sent to tell clients the other client's latency to server.
 #endif
 	NUMPACKETTYPE
 } packettype_t;
@@ -113,6 +130,26 @@ typedef struct
 	ticcmd_t cmd, cmd2;
 } ATTRPACK client2cmd_pak;
 
+// 3P Splitscreen packet
+// WARNING: must have the same format of clientcmd_pak, for more easy use
+typedef struct
+{
+	UINT8 client_tic;
+	UINT8 resendfrom;
+	INT16 consistancy;
+	ticcmd_t cmd, cmd2, cmd3;
+} ATTRPACK client3cmd_pak;
+
+// 4P Splitscreen packet
+// WARNING: must have the same format of clientcmd_pak, for more easy use
+typedef struct
+{
+	UINT8 client_tic;
+	UINT8 resendfrom;
+	INT16 consistancy;
+	ticcmd_t cmd, cmd2, cmd3, cmd4;
+} ATTRPACK client4cmd_pak;
+
 #ifdef _MSC_VER
 #pragma warning(disable :  4200)
 #endif
@@ -146,8 +183,7 @@ typedef struct
 
 	// Resynch game scores and the like all at once
 	UINT32 score[MAXPLAYERS]; // Everyone's score
-	INT16 numboxes[MAXPLAYERS];
-	INT16 totalring[MAXPLAYERS];
+	UINT32 marescore[MAXPLAYERS]; // SRB2kart: Battle score
 	tic_t realtime[MAXPLAYERS];
 	UINT8 laps[MAXPLAYERS];
 } ATTRPACK resynchend_pak;
@@ -166,7 +202,11 @@ typedef struct
 	angle_t aiming;
 	INT32 currentweapon;
 	INT32 ringweapons;
+
 	UINT16 powers[NUMPOWERS];
+
+	INT32 kartstuff[NUMKARTSTUFF]; // SRB2kart
+	angle_t frameangle; // SRB2kart
 
 	// Score is resynched in the confirm resync packet
 	INT32 health;
@@ -180,6 +220,10 @@ typedef struct
 	INT32 skin;
 	// Just in case Lua does something like
 	// modify these at runtime
+	// SRB2kart
+	UINT8 kartspeed;
+	UINT8 kartweight;
+	//
 	fixed_t normalspeed;
 	fixed_t runspeed;
 	UINT8 thrustfactor;
@@ -243,6 +287,8 @@ typedef struct
 	UINT8 timeshit;
 	INT32 onconveyor;
 
+	tic_t jointime;
+
 	//player->mo stuff
 	UINT8 hasmo; // Boolean
 
@@ -288,7 +334,7 @@ typedef struct
 
 	UINT8 gametype;
 	UINT8 modifiedgame;
-	SINT8 adminplayer; // Needs to be signed
+	SINT8 adminplayers[MAXPLAYERS]; // Needs to be signed
 
 	char server_context[8]; // Unique context id, generated at server startup.
 
@@ -315,6 +361,7 @@ typedef struct
 } ATTRPACK clientconfig_pak;
 
 #define MAXSERVERNAME 32
+#define MAXFILENEEDED 915
 // This packet is too large
 typedef struct
 {
@@ -336,7 +383,7 @@ typedef struct
 	unsigned char mapmd5[16];
 	UINT8 actnum;
 	UINT8 iszone;
-	UINT8 fileneeded[915]; // is filled with writexxx (byteptr.h)
+	UINT8 fileneeded[MAXFILENEEDED]; // is filled with writexxx (byteptr.h)
 } ATTRPACK serverinfo_pak;
 
 typedef struct
@@ -393,8 +440,10 @@ typedef struct
 	UINT8 reserved; // Padding
 	union
 	{
-		clientcmd_pak clientpak;            //         144 bytes
-		client2cmd_pak client2pak;          //         200 bytes
+		clientcmd_pak clientpak;            //         145 bytes
+		client2cmd_pak client2pak;          //         202 bytes
+		client3cmd_pak client3pak;          //         258 bytes(?)
+		client4cmd_pak client4pak;          //         316 bytes(?)
 		servertics_pak serverpak;           //      132495 bytes (more around 360, no?)
 		serverconfig_pak servercfg;         //         773 bytes
 		resynchend_pak resynchend;          //
@@ -433,11 +482,12 @@ extern INT32 mapchangepending;
 // Points inside doomcom
 extern doomdata_t *netbuffer;
 
+extern consvar_t cv_showjoinaddress;
 extern consvar_t cv_playbackspeed;
 
-#define BASEPACKETSIZE ((size_t)&(((doomdata_t *)0)->u))
-#define FILETXHEADER ((size_t)((filetx_pak *)0)->data)
-#define BASESERVERTICSSIZE ((size_t)&(((doomdata_t *)0)->u.serverpak.cmds[0]))
+#define BASEPACKETSIZE      offsetof(doomdata_t, u)
+#define FILETXHEADER        offsetof(filetx_pak, data)
+#define BASESERVERTICSSIZE  offsetof(doomdata_t, u.serverpak.cmds[0])
 
 #define KICK_MSG_GO_AWAY     1
 #define KICK_MSG_CON_FAIL    2
@@ -449,6 +499,17 @@ extern consvar_t cv_playbackspeed;
 #endif
 #define KICK_MSG_CUSTOM_KICK 7
 #define KICK_MSG_CUSTOM_BAN  8
+
+typedef enum
+{
+	KR_KICK          = 1, //Kicked by server
+	KR_PINGLIMIT     = 2, //Broke Ping Limit
+	KR_SYNCH         = 3, //Synch Failure
+	KR_TIMEOUT       = 4, //Connection Timeout
+	KR_BAN           = 5, //Banned by server
+	KR_LEAVE         = 6, //Quit the game
+
+} kickreason_t;
 
 extern boolean server;
 #define client (!server)
@@ -466,7 +527,11 @@ extern UINT32 realpingtable[MAXPLAYERS];
 extern UINT32 playerpingtable[MAXPLAYERS];
 #endif
 
-extern consvar_t cv_joinnextround, cv_allownewplayer, cv_maxplayers, cv_resynchattempts, cv_blamecfail, cv_maxsend, cv_noticedownload, cv_downloadspeed;
+extern consvar_t
+#ifdef VANILLAJOINNEXTROUND
+	cv_joinnextround,
+#endif
+	cv_netticbuffer, cv_allownewplayer, cv_maxplayers, cv_resynchattempts, cv_blamecfail, cv_maxsend, cv_noticedownload, cv_downloadspeed;
 
 // Used in d_net, the only dependence
 tic_t ExpandTics(INT32 low);
@@ -476,8 +541,11 @@ void D_ClientServerInit(void);
 void RegisterNetXCmd(netxcmd_t id, void (*cmd_f)(UINT8 **p, INT32 playernum));
 void SendNetXCmd(netxcmd_t id, const void *param, size_t nparam);
 void SendNetXCmd2(netxcmd_t id, const void *param, size_t nparam); // splitsreen player
+void SendNetXCmd3(netxcmd_t id, const void *param, size_t nparam); // splitsreen3 player
+void SendNetXCmd4(netxcmd_t id, const void *param, size_t nparam); // splitsreen4 player
 
 // Create any new ticcmds and broadcast to other players.
+void NetKeepAlive(void);
 void NetUpdate(void);
 
 void SV_StartSinglePlayerServer(void);
@@ -486,7 +554,7 @@ void SV_SpawnPlayer(INT32 playernum, INT32 x, INT32 y, angle_t angle);
 void SV_StopServer(void);
 void SV_ResetServer(void);
 void CL_AddSplitscreenPlayer(void);
-void CL_RemoveSplitscreenPlayer(void);
+void CL_RemoveSplitscreenPlayer(UINT8 p);
 void CL_Reset(void);
 void CL_ClearPlayer(INT32 playernum);
 void CL_UpdateServerList(boolean internetsearch, INT32 room);
@@ -521,4 +589,5 @@ tic_t GetLag(INT32 node);
 UINT8 GetFreeXCmdSize(void);
 
 extern UINT8 hu_resynching;
+extern UINT8 hu_stopped; // kart, true when the game is stopped for players due to a disconnecting or connecting player
 #endif

@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -43,6 +43,8 @@ const char *GetPalette(void);
 
 extern RGBA_t *pLocalPalette;
 
+extern UINT8 hudtrans;
+
 // Retrieve the ARGB value from a palette color index
 #define V_GetColor(color) (pLocalPalette[color&0xFF])
 
@@ -64,8 +66,6 @@ extern RGBA_t *pLocalPalette;
 #define V_MONOSPACE          0x00000C00 // Don't do width checks on characters, all characters 8 width
 
 // use bits 13-16 for colors
-// though we only have 7 colors now, perhaps we can introduce
-// more as needed later
 #define V_CHARCOLORSHIFT     12
 #define V_CHARCOLORMASK      0x0000F000
 // for simplicity's sake, shortcuts to specific colors
@@ -76,6 +76,14 @@ extern RGBA_t *pLocalPalette;
 #define V_REDMAP             0x00005000
 #define V_GRAYMAP            0x00006000
 #define V_ORANGEMAP          0x00007000
+#define V_SKYMAP             0x00008000
+#define V_LAVENDERMAP        0x00009000
+#define V_GOLDMAP            0x0000A000
+#define V_TEAMAP             0x0000B000
+#define V_STEELMAP           0x0000C000
+#define V_PINKMAP            0x0000D000
+#define V_BROWNMAP           0x0000E000
+#define V_PEACHMAP           0x0000F000
 
 // use bits 17-20 for alpha transparency
 #define V_ALPHASHIFT         16
@@ -92,24 +100,24 @@ extern RGBA_t *pLocalPalette;
 #define V_90TRANS            0x00090000
 #define V_HUDTRANSHALF       0x000D0000
 #define V_HUDTRANS           0x000E0000 // draw the hud translucent
-#define V_HUDTRANSDOUBLE     0x000F0000
 
-#define V_AUTOFADEOUT        0x00100000 // used by CECHOs, automatic fade out when almost over
-#define V_RETURN8            0x00200000 // 8 pixel return instead of 12
-#define V_OFFSET             0x00400000 // account for offsets in patches
-#define V_ALLOWLOWERCASE     0x00800000 // (strings only) allow fonts that have lowercase letters to use them
-#define V_FLIP               0x00800000 // (patches only) Horizontal flip
+#define V_AUTOFADEOUT        0x000F0000 // used by CECHOs, automatic fade out when almost over
+#define V_RETURN8            0x00100000 // 8 pixel return instead of 12
+#define V_OFFSET             0x00200000 // account for offsets in patches
+#define V_ALLOWLOWERCASE     0x00400000 // (strings only) allow fonts that have lowercase letters to use them
+#define V_FLIP               0x00400000 // (patches only) Horizontal flip
 
-#define V_SNAPTOTOP          0x01000000 // for centering
-#define V_SNAPTOBOTTOM       0x02000000 // for centering
-#define V_SNAPTOLEFT         0x04000000 // for centering
-#define V_SNAPTORIGHT        0x08000000 // for centering
+#define V_SNAPTOTOP          0x00800000 // for centering
+#define V_SNAPTOBOTTOM       0x01000000 // for centering
+#define V_SNAPTOLEFT         0x02000000 // for centering
+#define V_SNAPTORIGHT        0x04000000 // for centering
 
-#define V_WRAPX              0x10000000 // Don't clamp texture on X (for HW mode)
-#define V_WRAPY              0x20000000 // Don't clamp texture on Y (for HW mode)
+#define V_WRAPX              0x08000000 // Don't clamp texture on X (for HW mode)
+#define V_WRAPY              0x10000000 // Don't clamp texture on Y (for HW mode)
 
-#define V_NOSCALESTART       0x40000000  // don't scale x, y, start coords
-#define V_SPLITSCREEN        0x80000000
+#define V_NOSCALESTART       0x20000000  // don't scale x, y, start coords
+#define V_SPLITSCREEN        0x40000000
+#define V_HORZSCREEN         0x80000000
 
 // defines for old functions
 #define V_DrawPatch(x,y,s,p) V_DrawFixedPatch((x)<<FRACBITS, (y)<<FRACBITS, FRACUNIT, s|V_NOSCALESTART|V_NOSCALEPATCH, p, NULL)
@@ -139,16 +147,23 @@ void V_DrawScaledPic (INT32 px1, INT32 py1, INT32 scrn, INT32 lumpnum);
 
 // fill a box with a single color
 void V_DrawFill(INT32 x, INT32 y, INT32 w, INT32 h, INT32 c);
+void V_DrawFillConsoleMap(INT32 x, INT32 y, INT32 w, INT32 h, INT32 c);
+// fill a triangle with a single color
+void V_DrawDiag(INT32 x, INT32 y, INT32 wh, INT32 c);
 // fill a box with a flat as a pattern
 void V_DrawFlatFill(INT32 x, INT32 y, INT32 w, INT32 h, lumpnum_t flatnum);
 
 // fade down the screen buffer before drawing the menu over
-void V_DrawFadeScreen(void);
+void V_DrawFadeScreen(UINT16 color, UINT8 strength);
 
 void V_DrawFadeConsBack(INT32 plines);
 
 // draw a single character
 void V_DrawCharacter(INT32 x, INT32 y, INT32 c, boolean lowercaseallowed);
+// draw a single character, but for the chat
+void V_DrawChatCharacter(INT32 x, INT32 y, INT32 c, boolean lowercaseallowed, UINT8 *colormap);
+
+UINT8 *V_GetStringColormap(INT32 colorflags);
 
 void V_DrawLevelTitle(INT32 x, INT32 y, INT32 option, const char *string);
 
@@ -157,6 +172,7 @@ char *V_WordWrap(INT32 x, INT32 w, INT32 option, const char *string);
 
 // draw a string using the hu_font
 void V_DrawString(INT32 x, INT32 y, INT32 option, const char *string);
+void V_DrawKartString(INT32 x, INT32 y, INT32 option, const char *string);	// SRB2kart
 void V_DrawCenteredString(INT32 x, INT32 y, INT32 option, const char *string);
 void V_DrawRightAlignedString(INT32 x, INT32 y, INT32 option, const char *string);
 

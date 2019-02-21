@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -36,6 +36,26 @@ drawseg_t *ds_p = NULL;
 
 // indicates doors closed wrt automap bugfix:
 INT32 doorclosed;
+
+static boolean R_NoEncore(sector_t *sector, boolean ceiling)
+{
+	boolean invertencore = (GETSECSPECIAL(sector->special, 2) == 15);
+#if 0 // perfect implementation
+	INT32 val = GETSECSPECIAL(sector->special, 3);
+	if (val != 1 && val != 3 // spring panel
+#else // optimised, see #define GETSECSPECIAL(i,j) ((i >> ((j-1)*4))&15)
+	if ((!(sector->special & (1<<8)) || (sector->special & ((4|8)<<8))) // spring panel
+#endif
+		&& GETSECSPECIAL(sector->special, 4) != 6) // sneaker panel
+			return invertencore;
+
+	if (invertencore)
+		return false;
+
+	if (ceiling)
+		return ((boolean)(sector->flags & SF_FLIPSPECIAL_CEILING));
+	return ((boolean)(sector->flags & SF_FLIPSPECIAL_FLOOR));
+}
 
 //
 // R_ClearDrawSegs
@@ -202,30 +222,6 @@ void R_PortalClearClipSegs(INT32 start, INT32 end)
 	newend = solidsegs + 2;
 }
 
-
-// R_DoorClosed
-//
-// This function is used to fix the automap bug which
-// showed lines behind closed doors simply because the door had a dropoff.
-//
-// It assumes that Doom has already ruled out a door being closed because
-// of front-back closure (e.g. front floor is taller than back ceiling).
-static INT32 R_DoorClosed(void)
-{
-	return
-
-	// if door is closed because back is shut:
-	backsector->ceilingheight <= backsector->floorheight
-
-	// preserve a kind of transparent door/lift special effect:
-	&& (backsector->ceilingheight >= frontsector->ceilingheight || curline->sidedef->toptexture)
-
-	&& (backsector->floorheight <= frontsector->floorheight || curline->sidedef->bottomtexture)
-
-	// properly render skies (consider door "open" if both ceilings are sky):
-	&& (backsector->ceilingpic != skyflatnum || frontsector->ceilingpic != skyflatnum);
-}
-
 //
 // If player's view height is underneath fake floor, lower the
 // drawn ceiling to be just under the floor height, and replace
@@ -257,7 +253,11 @@ sector_t *R_FakeFlat(sector_t *sec, sector_t *tempsec, INT32 *floorlightlevel,
 		INT32 heightsec;
 		boolean underwater;
 
-		if (splitscreen && viewplayer == &players[secondarydisplayplayer] && camera2.chase)
+		if (splitscreen > 2 && viewplayer == &players[fourthdisplayplayer] && camera4.chase)
+			heightsec = R_PointInSubsector(camera4.x, camera4.y)->sector->heightsec;
+		else if (splitscreen > 1 && viewplayer == &players[thirddisplayplayer] && camera3.chase)
+			heightsec = R_PointInSubsector(camera3.x, camera3.y)->sector->heightsec;
+		else if (splitscreen && viewplayer == &players[secondarydisplayplayer] && camera2.chase)
 			heightsec = R_PointInSubsector(camera2.x, camera2.y)->sector->heightsec;
 		else if (camera.chase && viewplayer == &players[displayplayer])
 			heightsec = R_PointInSubsector(camera.x, camera.y)->sector->heightsec;
@@ -365,6 +365,36 @@ sector_t *R_FakeFlat(sector_t *sec, sector_t *tempsec, INT32 *floorlightlevel,
 	return sec;
 }
 
+boolean R_IsEmptyLine(seg_t *line, sector_t *front, sector_t *back)
+{
+	return (
+#ifdef POLYOBJECTS
+		!line->polyseg &&
+#endif
+		back->ceilingpic == front->ceilingpic
+		&& back->floorpic == front->floorpic
+#ifdef ESLOPE
+		&& back->f_slope == front->f_slope
+		&& back->c_slope == front->c_slope
+#endif
+		&& back->lightlevel == front->lightlevel
+		&& !line->sidedef->midtexture
+		// Check offsets too!
+		&& back->floor_xoffs == front->floor_xoffs
+		&& back->floor_yoffs == front->floor_yoffs
+		&& back->floorpic_angle == front->floorpic_angle
+		&& back->ceiling_xoffs == front->ceiling_xoffs
+		&& back->ceiling_yoffs == front->ceiling_yoffs
+		&& back->ceilingpic_angle == front->ceilingpic_angle
+		// Consider altered lighting.
+		&& back->floorlightsec == front->floorlightsec
+		&& back->ceilinglightsec == front->ceilinglightsec
+		// Consider colormaps
+		&& back->extra_colormap == front->extra_colormap
+		&& ((!front->ffloors && !back->ffloors)
+		|| front->tag == back->tag));
+}
+
 //
 // R_AddLine
 // Clips the given segment and adds any visible pieces to the line list.
@@ -373,17 +403,17 @@ static void R_AddLine(seg_t *line)
 {
 	INT32 x1, x2;
 	angle_t angle1, angle2, span, tspan;
-	static sector_t tempsec; // ceiling/water hack
+	static sector_t tempsec;
+
+	portalline = false;
 
 	if (line->polyseg && !(line->polyseg->flags & POF_RENDERSIDES))
 		return;
 
+	// big room fix
+	angle1 = R_PointToAngleEx(viewx, viewy, line->v1->x, line->v1->y);
+	angle2 = R_PointToAngleEx(viewx, viewy, line->v2->x, line->v2->y);
 	curline = line;
-	portalline = false;
-
-	// OPTIMIZE: quickly reject orthogonal back sides.
-	angle1 = R_PointToAngle(line->v1->x, line->v1->y);
-	angle2 = R_PointToAngle(line->v2->x, line->v2->y);
 
 	// Clip to view edges.
 	span = angle1 - angle2;
@@ -478,20 +508,23 @@ static void R_AddLine(seg_t *line)
 		SLOPEPARAMS( backsector->f_slope, backf1,  backf2,  backsector->floorheight)
 		SLOPEPARAMS( backsector->c_slope, backc1,  backc2,  backsector->ceilingheight)
 #undef SLOPEPARAMS
-		if ((backc1 <= frontf1 && backc2 <= frontf2)
-			|| (backf1 >= frontc1 && backf2 >= frontc2))
+		if (viewsector != backsector && viewsector != frontsector)
 		{
-			goto clipsolid;
+			if ((backc1 <= frontf1 && backc2 <= frontf2)
+				|| (backf1 >= frontc1 && backf2 >= frontc2))
+			{
+				goto clipsolid;
+			}
+
+			// Check for automap fix. Store in doorclosed for r_segs.c
+			doorclosed = (backc1 <= backf1 && backc2 <= backf2
+			&& ((backc1 >= frontc1 && backc2 >= frontc2) || curline->sidedef->toptexture)
+			&& ((backf1 <= frontf1 && backf2 >= frontf2) || curline->sidedef->bottomtexture)
+			&& (backsector->ceilingpic != skyflatnum || frontsector->ceilingpic != skyflatnum));
+
+			if (doorclosed)
+				goto clipsolid;
 		}
-
-		// Check for automap fix. Store in doorclosed for r_segs.c
-		doorclosed = (backc1 <= backf1 && backc2 <= backf2
-		&& ((backc1 >= frontc1 && backc2 >= frontc2) || curline->sidedef->toptexture)
-		&& ((backf1 <= frontf1 && backf2 >= frontf2) || curline->sidedef->bottomtexture)
-		&& (backsector->ceilingpic != skyflatnum || frontsector->ceilingpic != skyflatnum));
-
-		if (doorclosed)
-			goto clipsolid;
 
 		// Window.
 		if (backc1 != frontc1 || backc2 != frontc2
@@ -503,16 +536,23 @@ static void R_AddLine(seg_t *line)
 	else
 #endif
 	{
-		if (backsector->ceilingheight <= frontsector->floorheight
-			|| backsector->floorheight >= frontsector->ceilingheight)
+		if (viewsector != backsector && viewsector != frontsector)
 		{
-			goto clipsolid;
-		}
+			if (backsector->ceilingheight <= frontsector->floorheight
+				|| backsector->floorheight >= frontsector->ceilingheight)
+			{
+				goto clipsolid;
+			}
 
-		// Check for automap fix. Store in doorclosed for r_segs.c
-		doorclosed = R_DoorClosed();
-		if (doorclosed)
-			goto clipsolid;
+			// Check for automap fix. Store in doorclosed for r_segs.c
+			doorclosed = (backsector->ceilingheight <= backsector->floorheight
+			&& (backsector->ceilingheight >= frontsector->ceilingheight || curline->sidedef->toptexture)
+			&& (backsector->floorheight <= frontsector->floorheight || curline->sidedef->bottomtexture)
+			&& (backsector->ceilingpic != skyflatnum || frontsector->ceilingpic != skyflatnum));
+
+			if (doorclosed)
+				goto clipsolid;
+		}
 
 		// Window.
 		if (backsector->ceilingheight != frontsector->ceilingheight
@@ -526,36 +566,8 @@ static void R_AddLine(seg_t *line)
 	// Identical floor and ceiling on both sides, identical light levels on both sides,
 	// and no middle texture.
 
-	if (
-#ifdef POLYOBJECTS
-		!line->polyseg &&
-#endif
-		backsector->ceilingpic == frontsector->ceilingpic
-		&& backsector->floorpic == frontsector->floorpic
-#ifdef ESLOPE
-		&& backsector->f_slope == frontsector->f_slope
-		&& backsector->c_slope == frontsector->c_slope
-#endif
-		&& backsector->lightlevel == frontsector->lightlevel
-		&& !curline->sidedef->midtexture
-		// Check offsets too!
-		&& backsector->floor_xoffs == frontsector->floor_xoffs
-		&& backsector->floor_yoffs == frontsector->floor_yoffs
-		&& backsector->floorpic_angle == frontsector->floorpic_angle
-		&& backsector->ceiling_xoffs == frontsector->ceiling_xoffs
-		&& backsector->ceiling_yoffs == frontsector->ceiling_yoffs
-		&& backsector->ceilingpic_angle == frontsector->ceilingpic_angle
-		// Consider altered lighting.
-		&& backsector->floorlightsec == frontsector->floorlightsec
-		&& backsector->ceilinglightsec == frontsector->ceilinglightsec
-		// Consider colormaps
-		&& backsector->extra_colormap == frontsector->extra_colormap
-		&& ((!frontsector->ffloors && !backsector->ffloors)
-		|| frontsector->tag == backsector->tag))
-	{
+	if (R_IsEmptyLine(line, frontsector, backsector))
 		return;
-	}
-
 
 clippass:
 	R_ClipPassWallSegment(x1, x2 - 1);
@@ -590,69 +602,35 @@ INT32 checkcoord[12][4] =
 	{2, 1, 3, 0}
 };
 
-static boolean R_CheckBBox(fixed_t *bspcoord)
+static boolean R_CheckBBox(const fixed_t *bspcoord)
 {
-	INT32 boxpos, sx1, sx2;
-	fixed_t px1, py1, px2, py2;
-	angle_t angle1, angle2, span, tspan;
+	angle_t angle1, angle2;
+	INT32 sx1, sx2, boxpos;
+	const INT32* check;
 	cliprange_t *start;
 
 	// Find the corners of the box that define the edges from current viewpoint.
-	if (viewx <= bspcoord[BOXLEFT])
-		boxpos = 0;
-	else if (viewx < bspcoord[BOXRIGHT])
-		boxpos = 1;
-	else
-		boxpos = 2;
-
-	if (viewy >= bspcoord[BOXTOP])
-		boxpos |= 0;
-	else if (viewy > bspcoord[BOXBOTTOM])
-		boxpos |= 1<<2;
-	else
-		boxpos |= 2<<2;
-
-	if (boxpos == 5)
+	if ((boxpos = (viewx <= bspcoord[BOXLEFT] ? 0 : viewx < bspcoord[BOXRIGHT] ? 1 : 2) + (viewy >= bspcoord[BOXTOP] ? 0 : viewy > bspcoord[BOXBOTTOM] ? 4 : 8)) == 5)
 		return true;
 
-	px1 = bspcoord[checkcoord[boxpos][0]];
-	py1 = bspcoord[checkcoord[boxpos][1]];
-	px2 = bspcoord[checkcoord[boxpos][2]];
-	py2 = bspcoord[checkcoord[boxpos][3]];
+	check = checkcoord[boxpos];
 
-	// check clip list for an open space
-	angle1 = R_PointToAngle2(viewx>>1, viewy>>1, px1>>1, py1>>1) - viewangle;
-	angle2 = R_PointToAngle2(viewx>>1, viewy>>1, px2>>1, py2>>1) - viewangle;
+	// big room fix
+	angle1 = R_PointToAngleEx(viewx, viewy, bspcoord[check[0]], bspcoord[check[1]]) - viewangle;
+	angle2 = R_PointToAngleEx(viewx, viewy, bspcoord[check[2]], bspcoord[check[3]]) - viewangle;
 
-	span = angle1 - angle2;
-
-	// Sitting on a line?
-	if (span >= ANGLE_180)
-		return true;
-
-	tspan = angle1 + clipangle;
-
-	if (tspan > doubleclipangle)
+	if ((signed)angle1 < (signed)angle2)
 	{
-		tspan -= doubleclipangle;
-
-		// Totally off the left edge?
-		if (tspan >= span)
-			return false;
-
-		angle1 = clipangle;
+		if ((angle1 >= ANGLE_180) && (angle1 < ANGLE_270))
+			angle1 = ANGLE_180-1;
+		else
+			angle2 = ANGLE_180;
 	}
-	tspan = clipangle - angle2;
-	if (tspan > doubleclipangle)
-	{
-		tspan -= doubleclipangle;
 
-		// Totally off the left edge?
-		if (tspan >= span)
-			return false;
-
-		angle2 = -(signed)clipangle;
-	}
+	if ((signed)angle2 >= (signed)clipangle) return false;
+	if ((signed)angle1 <= -(signed)clipangle) return false;
+	if ((signed)angle1 >= (signed)clipangle) angle1 = clipangle;
+	if ((signed)angle2 <= -(signed)clipangle) angle2 = 0-clipangle;
 
 	// Find the first clippost that touches the source post (adjacent pixels are touching).
 	angle1 = (angle1+ANGLE_90)>>ANGLETOFINESHIFT;
@@ -661,9 +639,7 @@ static boolean R_CheckBBox(fixed_t *bspcoord)
 	sx2 = viewangletox[angle2];
 
 	// Does not cross a pixel.
-	if (sx1 == sx2)
-		return false;
-	sx2--;
+	if (sx1 >= sx2) return false;
 
 	start = solidsegs;
 	while (start->last < sx2)
@@ -851,7 +827,7 @@ static void R_AddPolyObjects(subsector_t *sub)
 
 drawseg_t *firstseg;
 
-static void R_Subsector(size_t num)
+static void R_Subsector(size_t num, UINT8 viewnumber)
 {
 	INT32 count, floorlightlevel, ceilinglightlevel, light;
 	seg_t *line;
@@ -931,7 +907,7 @@ static void R_Subsector(size_t num)
 #ifdef ESLOPE
 			, frontsector->f_slope
 #endif
-			);
+			, R_NoEncore(frontsector, false));
 	}
 	else
 		floorplane = NULL;
@@ -953,7 +929,7 @@ static void R_Subsector(size_t num)
 #ifdef ESLOPE
 			, frontsector->c_slope
 #endif
-			);
+			, R_NoEncore(frontsector, true));
 	}
 	else
 		ceilingplane = NULL;
@@ -1014,7 +990,7 @@ static void R_Subsector(size_t num)
 #ifdef ESLOPE
 					, *rover->b_slope
 #endif
-					);
+					, R_NoEncore(rover->master->frontsector, true));
 
 #ifdef ESLOPE
 				ffloor[numffloors].slope = *rover->b_slope;
@@ -1060,7 +1036,7 @@ static void R_Subsector(size_t num)
 #ifdef ESLOPE
 					, *rover->t_slope
 #endif
-					);
+					, R_NoEncore(rover->master->frontsector, false));
 
 #ifdef ESLOPE
 				ffloor[numffloors].slope = *rover->t_slope;
@@ -1102,34 +1078,15 @@ static void R_Subsector(size_t num)
 				&& polysec->floorheight >= floorcenterz
 				&& (viewz < polysec->floorheight))
 			{
-				fixed_t xoff, yoff;
-				xoff = polysec->floor_xoffs;
-				yoff = polysec->floor_yoffs;
-
-				if (po->angle != 0) {
-					angle_t fineshift = po->angle >> ANGLETOFINESHIFT;
-
-					xoff -= FixedMul(FINECOSINE(fineshift), po->centerPt.x)+FixedMul(FINESINE(fineshift), po->centerPt.y);
-					yoff -= FixedMul(FINESINE(fineshift), po->centerPt.x)-FixedMul(FINECOSINE(fineshift), po->centerPt.y);
-				} else {
-					xoff -= po->centerPt.x;
-					yoff += po->centerPt.y;
-				}
-
 				light = R_GetPlaneLight(frontsector, polysec->floorheight, viewz < polysec->floorheight);
-				light = 0;
 				ffloor[numffloors].plane = R_FindPlane(polysec->floorheight, polysec->floorpic,
-						polysec->lightlevel, xoff, yoff,
+						polysec->lightlevel, polysec->floor_xoffs, polysec->floor_yoffs,
 						polysec->floorpic_angle-po->angle,
-						NULL,
-						NULL
-#ifdef POLYOBJECTS_PLANES
-					, po
-#endif
+						NULL, NULL, po
 #ifdef ESLOPE
 					, NULL // will ffloors be slopable eventually?
 #endif
-					);
+					, R_NoEncore(polysec, false));
 
 				ffloor[numffloors].height = polysec->floorheight;
 				ffloor[numffloors].polyobj = po;
@@ -1150,32 +1107,15 @@ static void R_Subsector(size_t num)
 				&& polysec->ceilingheight <= ceilingcenterz
 				&& (viewz > polysec->ceilingheight))
 			{
-				fixed_t xoff, yoff;
-				xoff = polysec->ceiling_xoffs;
-				yoff = polysec->ceiling_yoffs;
-
-				if (po->angle != 0) {
-					angle_t fineshift = po->angle >> ANGLETOFINESHIFT;
-
-					xoff -= FixedMul(FINECOSINE(fineshift), po->centerPt.x)+FixedMul(FINESINE(fineshift), po->centerPt.y);
-					yoff -= FixedMul(FINESINE(fineshift), po->centerPt.x)-FixedMul(FINECOSINE(fineshift), po->centerPt.y);
-				} else {
-					xoff -= po->centerPt.x;
-					yoff += po->centerPt.y;
-				}
-
 				light = R_GetPlaneLight(frontsector, polysec->ceilingheight, viewz < polysec->ceilingheight);
-				light = 0;
 				ffloor[numffloors].plane = R_FindPlane(polysec->ceilingheight, polysec->ceilingpic,
-					polysec->lightlevel, xoff, yoff, polysec->ceilingpic_angle-po->angle,
-					NULL, NULL
-#ifdef POLYOBJECTS_PLANES
-					, po
-#endif
+					polysec->lightlevel, polysec->ceiling_xoffs, polysec->ceiling_yoffs,
+					polysec->ceilingpic_angle-po->angle,
+					NULL, NULL, po
 #ifdef ESLOPE
 					, NULL // will ffloors be slopable eventually?
 #endif
-					);
+					, R_NoEncore(polysec, true));
 
 				ffloor[numffloors].polyobj = po;
 				ffloor[numffloors].height = polysec->ceilingheight;
@@ -1209,7 +1149,7 @@ static void R_Subsector(size_t num)
    // Either you must pass the fake sector and handle validcount here, on the
    // real sector, or you must account for the lighting in some other way,
    // like passing it as an argument.
-	R_AddSprites(sub->sector, (floorlightlevel+ceilinglightlevel)/2);
+	R_AddSprites(sub->sector, (floorlightlevel+ceilinglightlevel)/2, viewnumber);
 
 	firstseg = NULL;
 
@@ -1415,7 +1355,7 @@ INT32 R_GetPlaneLight(sector_t *sector, fixed_t planeheight, boolean underside)
 //
 // killough 5/2/98: reformatted, removed tail recursion
 
-void R_RenderBSPNode(INT32 bspnum)
+void R_RenderBSPNode(INT32 bspnum, UINT8 viewnumber)
 {
 	node_t *bsp;
 	INT32 side;
@@ -1426,7 +1366,7 @@ void R_RenderBSPNode(INT32 bspnum)
 		// Decide which side the view point is on.
 		side = R_PointOnSide(viewx, viewy, bsp);
 		// Recursively divide front space.
-		R_RenderBSPNode(bsp->children[side]);
+		R_RenderBSPNode(bsp->children[side], viewnumber);
 
 		// Possibly divide back space.
 
@@ -1444,5 +1384,5 @@ void R_RenderBSPNode(INT32 bspnum)
 		portalcullsector = NULL;
 	}
 
-	R_Subsector(bspnum == -1 ? 0 : bspnum & ~NF_SUBSECTOR);
+	R_Subsector(bspnum == -1 ? 0 : bspnum & ~NF_SUBSECTOR, viewnumber);
 }

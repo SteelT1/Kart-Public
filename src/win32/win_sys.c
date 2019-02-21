@@ -261,7 +261,7 @@ tic_t I_GetTime(void)
 
 void I_Sleep(void)
 {
-	if (cv_sleep.value != -1)
+	if (cv_sleep.value > 0)
 		Sleep(cv_sleep.value);
 }
 
@@ -504,7 +504,7 @@ static void signal_handler(int num)
 	}
 #endif
 
-	MessageBoxA(hWndMain, va("signal_handler(): %s", sigmsg), "SRB2 error", MB_OK|MB_ICONERROR);
+	MessageBoxA(hWndMain, va("signal_handler(): %s", sigmsg), "SRB2Kart error", MB_OK|MB_ICONERROR);
 
 	signal(num, SIG_DFL); // default signal action
 	raise(num);
@@ -621,7 +621,7 @@ void I_Error(const char *error, ...)
 			va_end(argptr);
 
 			OutputDebugStringA(txt);
-			MessageBoxA(hWndMain, txt, "SRB2 Recursive Error", MB_OK|MB_ICONERROR);
+			MessageBoxA(hWndMain, txt, "SRB2Kart Recursive Error", MB_OK|MB_ICONERROR);
 			W_Shutdown();
 			exit(-1); // recursive errors detected
 		}
@@ -665,7 +665,7 @@ void I_Error(const char *error, ...)
 	}
 #endif
 
-	MessageBoxA(hWndMain, txt, "SRB2 Error", MB_OK|MB_ICONERROR);
+	MessageBoxA(hWndMain, txt, "SRB2Kart Error", MB_OK|MB_ICONERROR);
 
 	W_Shutdown();
 	exit(-1);
@@ -771,6 +771,8 @@ void I_Quit(void)
 		ShowEndTxt(co);
 	}
 	fflush(stderr);
+	if (myargmalloc)
+		free(myargv); // Deallocate allocated memory
 	W_Shutdown();
 	exit(0);
 }
@@ -3077,8 +3079,8 @@ void I_UpdateMumble(const mobj_t *mobj, const listener_t listener)
 		return;
 
 	if(mumble->uiVersion != 2) {
-		wcsncpy(mumble->name, L"SRB2 "VERSIONSTRINGW, 256);
-		wcsncpy(mumble->description, L"Sonic Robo Blast 2 with integrated Mumble Link support.", 2048);
+		wcsncpy(mumble->name, L"SRB2Kart "VERSIONSTRINGW, 256);
+		wcsncpy(mumble->description, L"SRB2Kart with integrated Mumble Link support.", 2048);
 		mumble->uiVersion = 2;
 	}
 	mumble->uiTick++;

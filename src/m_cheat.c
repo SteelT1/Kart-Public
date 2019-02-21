@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -33,6 +33,8 @@
 #include "z_zone.h"
 #include "p_slopes.h"
 
+#include "k_kart.h" // srb2kart
+
 #include "lua_script.h"
 #include "lua_hook.h"
 
@@ -56,7 +58,7 @@ typedef struct
 // ==========================================================================
 
 // Cheat responders
-static UINT8 cheatf_ultimate(void)
+/*static UINT8 cheatf_ultimate(void)
 {
 	if (menuactive && (currentMenu != &MainDef && currentMenu != &SP_LoadDef))
 		return 0; // Only on the main menu, or the save select!
@@ -68,23 +70,36 @@ static UINT8 cheatf_ultimate(void)
 	if (currentMenu == &SP_LoadDef)
 		M_ForceSaveSlotSelected(NOSAVESLOT);
 	return 1;
-}
+}*/
 
 static UINT8 cheatf_warp(void)
 {
-	if (modifiedgame)
-		return 0;
+	UINT8 i;
+	boolean success = false;
+
+	/*if (modifiedgame)
+		return 0;*/
 
 	if (menuactive && currentMenu != &MainDef)
 		return 0; // Only on the main menu!
 
-	S_StartSound(0, sfx_itemup);
+	// Temporarily unlock EVERYTHING.
+	for (i = 0; i < MAXUNLOCKABLES; i++)
+	{
+		if (!unlockables[i].conditionset)
+			continue;
+		if (!unlockables[i].unlocked)
+		{
+			unlockables[i].unlocked = true;
+			success = true;
+		}
+	}
 
-	// Temporarily unlock stuff.
-	G_SetGameModified(false);
-	unlockables[2].unlocked = true; // credits
-	unlockables[3].unlocked = true; // sound test
-	unlockables[16].unlocked = true; // level select
+	if (success)
+	{
+		G_SaveGameData(true); //G_SetGameModified(false);
+		S_StartSound(0, sfx_kc42);
+	}
 
 	// Refresh secrets menu existing.
 	M_ClearMenus(true);
@@ -106,10 +121,10 @@ static UINT8 cheatf_devmode(void)
 	S_StartSound(0, sfx_itemup);
 
 	// Just unlock all the things and turn on -debug and console devmode.
-	G_SetGameModified(false);
+	G_SetGameModified(false, false); // might need to revist the latter later
 	for (i = 0; i < MAXUNLOCKABLES; i++)
 		unlockables[i].unlocked = true;
-	devparm = TRUE;
+	devparm = true;
 	cv_debug |= 0x8000;
 
 	// Refresh secrets menu existing.
@@ -119,28 +134,33 @@ static UINT8 cheatf_devmode(void)
 }
 #endif
 
-static cheatseq_t cheat_ultimate = {
+/*static cheatseq_t cheat_ultimate = {
 	0, cheatf_ultimate,
 	{ SCRAMBLE('u'), SCRAMBLE('l'), SCRAMBLE('t'), SCRAMBLE('i'), SCRAMBLE('m'), SCRAMBLE('a'), SCRAMBLE('t'), SCRAMBLE('e'), 0xff }
-};
+};*/
 
-static cheatseq_t cheat_ultimate_joy = {
+/*static cheatseq_t cheat_ultimate_joy = {
 	0, cheatf_ultimate,
 	{ SCRAMBLE(KEY_UPARROW), SCRAMBLE(KEY_UPARROW), SCRAMBLE(KEY_DOWNARROW), SCRAMBLE(KEY_DOWNARROW),
 	  SCRAMBLE(KEY_LEFTARROW), SCRAMBLE(KEY_RIGHTARROW), SCRAMBLE(KEY_LEFTARROW), SCRAMBLE(KEY_RIGHTARROW),
 	  SCRAMBLE(KEY_ENTER), 0xff }
-};
+};*/
 
 static cheatseq_t cheat_warp = {
 	0, cheatf_warp,
-	{ SCRAMBLE('r'), SCRAMBLE('e'), SCRAMBLE('d'), SCRAMBLE('x'), SCRAMBLE('v'), SCRAMBLE('i'), 0xff }
+	//{ SCRAMBLE('r'), SCRAMBLE('e'), SCRAMBLE('d'), SCRAMBLE('x'), SCRAMBLE('v'), SCRAMBLE('i'), 0xff }
+	{ SCRAMBLE('b'), SCRAMBLE('a'), SCRAMBLE('n'), SCRAMBLE('a'), SCRAMBLE('n'), SCRAMBLE('a'), 0xff }
 };
 
 static cheatseq_t cheat_warp_joy = {
 	0, cheatf_warp,
-	{ SCRAMBLE(KEY_LEFTARROW), SCRAMBLE(KEY_LEFTARROW), SCRAMBLE(KEY_UPARROW),
+	/*{ SCRAMBLE(KEY_LEFTARROW), SCRAMBLE(KEY_LEFTARROW), SCRAMBLE(KEY_UPARROW),
 	  SCRAMBLE(KEY_RIGHTARROW), SCRAMBLE(KEY_RIGHTARROW), SCRAMBLE(KEY_UPARROW),
 	  SCRAMBLE(KEY_LEFTARROW), SCRAMBLE(KEY_UPARROW),
+	  SCRAMBLE(KEY_ENTER), 0xff }*/
+	  { SCRAMBLE(KEY_LEFTARROW), SCRAMBLE(KEY_UPARROW), SCRAMBLE(KEY_RIGHTARROW),
+	  SCRAMBLE(KEY_RIGHTARROW), SCRAMBLE(KEY_UPARROW), SCRAMBLE(KEY_LEFTARROW),
+	  SCRAMBLE(KEY_DOWNARROW), SCRAMBLE(KEY_RIGHTARROW),
 	  SCRAMBLE(KEY_ENTER), 0xff }
 };
 
@@ -233,8 +253,8 @@ boolean cht_Responder(event_t *ev)
 	else
 		ch = (UINT8)ev->data1;
 
-	ret += cht_CheckCheat(&cheat_ultimate, (char)ch);
-	ret += cht_CheckCheat(&cheat_ultimate_joy, (char)ch);
+	//ret += cht_CheckCheat(&cheat_ultimate, (char)ch);
+	//ret += cht_CheckCheat(&cheat_ultimate_joy, (char)ch);
 	ret += cht_CheckCheat(&cheat_warp, (char)ch);
 	ret += cht_CheckCheat(&cheat_warp_joy, (char)ch);
 #ifdef DEVELOP
@@ -275,7 +295,7 @@ void Command_CheatNoClip_f(void)
 	plyr->pflags ^= PF_NOCLIP;
 	CONS_Printf(M_GetText("No Clipping %s\n"), plyr->pflags & PF_NOCLIP ? M_GetText("On") : M_GetText("Off"));
 
-	G_SetGameModified(multiplayer);
+	G_SetGameModified(multiplayer, true);
 }
 
 void Command_CheatGod_f(void)
@@ -290,7 +310,7 @@ void Command_CheatGod_f(void)
 	plyr->pflags ^= PF_GODMODE;
 	CONS_Printf(M_GetText("Sissy Mode %s\n"), plyr->pflags & PF_GODMODE ? M_GetText("On") : M_GetText("Off"));
 
-	G_SetGameModified(multiplayer);
+	G_SetGameModified(multiplayer, true);
 }
 
 void Command_CheatNoTarget_f(void)
@@ -305,7 +325,7 @@ void Command_CheatNoTarget_f(void)
 	plyr->pflags ^= PF_INVIS;
 	CONS_Printf(M_GetText("SEP Field %s\n"), plyr->pflags & PF_INVIS ? M_GetText("On") : M_GetText("Off"));
 
-	G_SetGameModified(multiplayer);
+	G_SetGameModified(multiplayer, true);
 }
 
 void Command_Scale_f(void)
@@ -357,7 +377,7 @@ void Command_Hurtme_f(void)
 }
 
 // Moves the NiGHTS player to another axis within the current mare
-void Command_JumpToAxis_f(void)
+/*void Command_JumpToAxis_f(void)
 {
 	REQUIRE_DEVMODE;
 	REQUIRE_INLEVEL;
@@ -418,7 +438,7 @@ void Command_Charspeed_f(void)
 		players[consoleplayer].actionspd = atoi(COM_Argv(2))<<FRACBITS;
 	else
 		CONS_Printf(M_GetText("charspeed <normalspeed/runspeed/thrustfactor/accelstart/acceleration/actionspd> <value>: set character speed\n"));
-}
+}*/
 
 void Command_RTeleport_f(void)
 {
@@ -663,7 +683,7 @@ void Command_Savecheckpoint_f(void)
 }
 
 // Like M_GetAllEmeralds() but for console devmode junkies.
-void Command_Getallemeralds_f(void)
+/*void Command_Getallemeralds_f(void)
 {
 	REQUIRE_SINGLEPLAYER;
 	REQUIRE_NOULTIMATE;
@@ -682,7 +702,7 @@ void Command_Resetemeralds_f(void)
 	emeralds = 0;
 
 	CONS_Printf(M_GetText("Emeralds reset to zero.\n"));
-}
+}*/
 
 void Command_Devmode_f(void)
 {
@@ -707,10 +727,10 @@ void Command_Devmode_f(void)
 		return;
 	}
 
-	G_SetGameModified(multiplayer);
+	G_SetGameModified(multiplayer, true);
 }
 
-void Command_Setrings_f(void)
+/*void Command_Setrings_f(void)
 {
 	REQUIRE_INLEVEL;
 	REQUIRE_SINGLEPLAYER;
@@ -765,7 +785,7 @@ void Command_Setcontinues_f(void)
 
 		G_SetGameModified(multiplayer);
 	}
-}
+}*/
 
 //
 // OBJECTPLACE (and related variables)
@@ -968,7 +988,7 @@ void OP_NightsObjectplace(player_t *player)
 	if (player->pflags & PF_ATTACKDOWN)
 	{
 		// Are ANY objectplace buttons pressed?  If no, remove flag.
-		if (!(cmd->buttons & (BT_ATTACK|BT_TOSSFLAG|BT_USE|BT_CAMRIGHT|BT_CAMLEFT)))
+		if (!(cmd->buttons & (BT_ATTACK|BT_ACCELERATE|BT_BRAKE|BT_FORWARD|BT_BACKWARD)))
 			player->pflags &= ~PF_ATTACKDOWN;
 
 		// Do nothing.
@@ -1008,7 +1028,7 @@ void OP_NightsObjectplace(player_t *player)
 	}
 
 	// This places a bumper!
-	if (cmd->buttons & BT_TOSSFLAG)
+	/*if (cmd->buttons & BT_SPECTATE)
 	{
 		player->pflags |= PF_ATTACKDOWN;
 		if (!OP_HeightOkay(player, false))
@@ -1016,10 +1036,10 @@ void OP_NightsObjectplace(player_t *player)
 
 		mt = OP_CreateNewMapThing(player, (UINT16)mobjinfo[MT_NIGHTSBUMPER].doomednum, false);
 		P_SpawnMapThing(mt);
-	}
+	}*/
 
 	// This places a ring!
-	if (cmd->buttons & BT_CAMRIGHT)
+	if (cmd->buttons & BT_BACKWARD)
 	{
 		player->pflags |= PF_ATTACKDOWN;
 		if (!OP_HeightOkay(player, false))
@@ -1030,7 +1050,7 @@ void OP_NightsObjectplace(player_t *player)
 	}
 
 	// This places a wing item!
-	if (cmd->buttons & BT_CAMLEFT)
+	if (cmd->buttons & BT_FORWARD)
 	{
 		player->pflags |= PF_ATTACKDOWN;
 		if (!OP_HeightOkay(player, false))
@@ -1041,7 +1061,7 @@ void OP_NightsObjectplace(player_t *player)
 	}
 
 	// This places a custom object as defined in the console cv_mapthingnum.
-	if (cmd->buttons & BT_USE)
+	if (cmd->buttons & BT_BRAKE)
 	{
 		UINT16 angle;
 
@@ -1054,7 +1074,7 @@ void OP_NightsObjectplace(player_t *player)
 		if (!OP_HeightOkay(player, false))
 			return;
 
-		if (player->mo->target->flags & MF_AMBUSH)
+		if (player->mo->target->flags2 & MF2_AMBUSH)
 			angle = (UINT16)player->anotherflyangle;
 		else
 		{
@@ -1099,9 +1119,9 @@ void OP_ObjectplaceMovement(player_t *player)
 	if (!(cmd->angleturn & TICCMD_RECEIVED))
 		ticmiss++;
 
-	if (cmd->buttons & BT_JUMP)
+	if (cmd->buttons & BT_ACCELERATE)
 		player->mo->z += FRACUNIT*cv_speed.value;
-	else if (cmd->buttons & BT_USE)
+	else if (cmd->buttons & BT_BRAKE)
 		player->mo->z -= FRACUNIT*cv_speed.value;
 
 	if (cmd->forwardmove != 0)
@@ -1110,12 +1130,12 @@ void OP_ObjectplaceMovement(player_t *player)
 		P_TeleportMove(player->mo, player->mo->x+player->mo->momx, player->mo->y+player->mo->momy, player->mo->z);
 		player->mo->momx = player->mo->momy = 0;
 	}
-	if (cmd->sidemove != 0)
+	/*if (cmd->sidemove != 0) -- was disabled in practice anyways, since sidemove was suppressed
 	{
 		P_Thrust(player->mo, player->mo->angle-ANGLE_90, (cmd->sidemove*FRACUNIT/MAXPLMOVE)*cv_speed.value);
 		P_TeleportMove(player->mo, player->mo->x+player->mo->momx, player->mo->y+player->mo->momy, player->mo->z);
 		player->mo->momx = player->mo->momy = 0;
-	}
+	}*/
 
 	if (player->mo->z > player->mo->ceilingz - player->mo->height)
 		player->mo->z = player->mo->ceilingz - player->mo->height;
@@ -1128,8 +1148,8 @@ void OP_ObjectplaceMovement(player_t *player)
 		player->mo->eflags &= ~MFE_VERTICALFLIP;
 
 	// make sure viewz follows player if in 1st person mode
-	player->deltaviewheight = 0;
-	player->viewheight = FixedMul(cv_viewheight.value << FRACBITS, player->mo->scale);
+	//player->deltaviewheight = 0;
+	player->viewheight = FixedMul(32 << FRACBITS, player->mo->scale);
 	if (player->mo->eflags & MFE_VERTICALFLIP)
 		player->viewz = player->mo->z + player->mo->height - player->viewheight;
 	else
@@ -1165,19 +1185,19 @@ void OP_ObjectplaceMovement(player_t *player)
 	if (player->pflags & PF_ATTACKDOWN)
 	{
 		// Are ANY objectplace buttons pressed?  If no, remove flag.
-		if (!(cmd->buttons & (BT_ATTACK|BT_TOSSFLAG|BT_CAMRIGHT|BT_CAMLEFT)))
+		if (!(cmd->buttons & (BT_ATTACK|BT_DRIFT)))
 			player->pflags &= ~PF_ATTACKDOWN;
 
 		// Do nothing.
 		return;
 	}
 
-	if (cmd->buttons & BT_CAMLEFT)
+	/*if (cmd->buttons & BT_FORWARD)
 	{
 		OP_CycleThings(-1);
 		player->pflags |= PF_ATTACKDOWN;
 	}
-	else if (cmd->buttons & BT_CAMRIGHT)
+	else*/ if (cmd->buttons & BT_DRIFT)
 	{
 		OP_CycleThings(1);
 		player->pflags |= PF_ATTACKDOWN;
@@ -1247,7 +1267,7 @@ void Command_ObjectPlace_f(void)
 	REQUIRE_SINGLEPLAYER;
 	REQUIRE_NOULTIMATE;
 
-	G_SetGameModified(multiplayer);
+	G_SetGameModified(multiplayer, true);
 
 	// Entering objectplace?
 	if (!objectplacing)
@@ -1264,10 +1284,10 @@ void Command_ObjectPlace_f(void)
 			HU_DoCEcho(va(M_GetText(
 				"\\\\\\\\\\\\\\\\\\\\\\\\\x82"
 				"   Objectplace Controls:   \x80\\\\"
-				"Camera L/R: Cycle mapthings\\"
-				"      Jump: Float up       \\"
-				"      Spin: Float down     \\"
-				" Fire Ring: Place object   \\")));
+				"     Drift: Cycle mapthings\\"
+				"Accelerate: Float up       \\"
+				"     Brake: Float down     \\"
+				"      Item: Place object   \\")));
 		}
 
 		// Save all the player's data.
@@ -1279,7 +1299,7 @@ void Command_ObjectPlace_f(void)
 		op_oldmomy = players[0].mo->momy;
 		op_oldmomz = players[0].mo->momz;
 		op_oldheight = players[0].mo->height;
-		op_oldstate = S_PLAY_STND;
+		op_oldstate = S_KART_STND1; // SRB2kart - was S_PLAY_STND
 		op_oldcolor = players[0].mo->color; // save color too in case of super/fireflower
 
 		// Remove ALL flags and motion.
@@ -1348,7 +1368,7 @@ void Command_ObjectPlace_f(void)
 		players[0].mo->color = op_oldcolor;
 
 		// This is necessary for recovery of dying players.
-		if (players[0].powers[pw_flashing] >= flashingtics)
-			players[0].powers[pw_flashing] = flashingtics - 1;
+		if (players[0].powers[pw_flashing] >= K_GetKartFlashing(&players[0]))
+			players[0].powers[pw_flashing] = K_GetKartFlashing(&players[0]) - 1;
 	}
 }

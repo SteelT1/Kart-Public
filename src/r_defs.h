@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -573,7 +573,11 @@ typedef struct seg_s
 	sector_t *frontsector;
 	sector_t *backsector;
 
+	fixed_t length;	// precalculated seg length
 #ifdef HWRENDER
+	// new pointers so that AdjustSegs doesn't mess with v1/v2
+	void *pv1; // polyvertex_t
+	void *pv2; // polyvertex_t
 	float flength; // length of the seg, used by hardware renderer
 
 	lightmap_t *lightmaps; // for static lightmap
@@ -722,23 +726,35 @@ typedef struct
 #pragma pack()
 #endif
 
+typedef enum
+{
+	SRF_SINGLE      = 0,   // 0-angle for all rotations
+	SRF_3D          = 1,   // Angles 1-8
+	SRF_LEFT        = 2,   // Left side has single patch
+	SRF_RIGHT       = 4,   // Right side has single patch
+	SRF_2D          = 6,   // SRF_LEFT|SRF_RIGHT
+	SRF_NONE        = 0xff // Initial value
+} spriterotateflags_t;     // SRF's up!
+
 //
 // Sprites are patches with a special naming convention so they can be
 //  recognized by R_InitSprites.
 // The base name is NNNNFx or NNNNFxFx, with x indicating the rotation,
-//  x = 0, 1-7.
+//  x = 0, 1-8, L/R
 // The sprite and frame specified by a thing_t is range checked at run time.
 // A sprite is a patch_t that is assumed to represent a three dimensional
 //  object and may have multiple rotations predrawn.
 // Horizontal flipping is used to save space, thus NNNNF2F5 defines a mirrored patch.
 // Some sprites will only have one picture used for all views: NNNNF0
+// Some sprites will take the entirety of the left side: NNNNFL
+// Or the right side: NNNNFR
+// Or both, mirrored: NNNNFLFR
 //
 typedef struct
 {
-	// If false use 0 for any position.
 	// Note: as eight entries are available, we might as well insert the same
 	//  name eight times.
-	UINT8 rotate;
+	UINT8 rotate; // see spriterotateflags_t above
 
 	// Lump to use for view angles 0-7.
 	lumpnum_t lumppat[8]; // lump number 16 : 16 wad : lump

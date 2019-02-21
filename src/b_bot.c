@@ -1,7 +1,7 @@
 // SONIC ROBO BLAST 2
 //-----------------------------------------------------------------------------
 // Copyright (C) 2007-2016 by John "JTE" Muniz.
-// Copyright (C) 2011-2016 by Sonic Team Junior.
+// Copyright (C) 2011-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -44,8 +44,8 @@ static inline void B_BuildTailsTiccmd(mobj_t *sonic, mobj_t *tails, ticcmd_t *cm
 	if (tails->player->pflags & (PF_MACESPIN|PF_ITEMHANG))
 	{
 		dist = P_AproxDistance(tails->x-sonic->x, tails->y-sonic->y);
-		if (sonic->player->cmd.buttons & BT_JUMP && sonic->player->pflags & (PF_JUMPED|PF_MACESPIN|PF_ITEMHANG))
-			cmd->buttons |= BT_JUMP;
+		if (sonic->player->cmd.buttons & BT_DRIFT && sonic->player->pflags & (PF_JUMPED|PF_MACESPIN|PF_ITEMHANG))
+			cmd->buttons |= BT_DRIFT;
 		if (sonic->player->pflags & (PF_MACESPIN|PF_ITEMHANG))
 		{
 			cmd->forwardmove = sonic->player->cmd.forwardmove;
@@ -53,7 +53,7 @@ static inline void B_BuildTailsTiccmd(mobj_t *sonic, mobj_t *tails, ticcmd_t *cm
 			if (sonic->angle < tails->angle)
 				cmd->angleturn = -cmd->angleturn;
 		} else if (dist > FixedMul(512*FRACUNIT, tails->scale))
-			cmd->buttons |= BT_JUMP;
+			cmd->buttons |= BT_DRIFT;
 		return;
 	}
 
@@ -116,12 +116,12 @@ void B_BuildTiccmd(player_t *player, ticcmd_t *cmd)
 	if (player->playerstate == PST_DEAD)
 	{
 		if (B_CheckRespawn(player))
-			cmd->buttons |= BT_JUMP;
+			cmd->buttons |= BT_DRIFT;
 		return;
 	}
 
 	// Bot AI isn't programmed in analog.
-	CV_SetValue(&cv_analog2, false);
+	//CV_SetValue(&cv_analog2, false);
 
 #ifdef HAVE_BLUA
 	// Let Lua scripts build ticcmds
@@ -189,9 +189,9 @@ void B_KeysToTiccmd(mobj_t *mo, ticcmd_t *cmd, boolean forward, boolean backward
 			cmd->sidemove += MAXPLMOVE<<FRACBITS>>16;
 	}
 	if (jump)
-		cmd->buttons |= BT_JUMP;
+		cmd->buttons |= BT_DRIFT;
 	if (spin)
-		cmd->buttons |= BT_USE;
+		cmd->buttons |= BT_BRAKE;
 }
 
 void B_MoveBlocked(player_t *player)
@@ -273,11 +273,11 @@ void B_RespawnBot(INT32 playernum)
 	P_TeleportMove(tails, x, y, z);
 	if (player->charability == CA_FLY)
 	{
-		P_SetPlayerMobjState(tails, S_PLAY_ABL1);
+		P_SetPlayerMobjState(tails, S_KART_STND1); // SRB2kart - was S_PLAY_ABL1
 		tails->player->powers[pw_tailsfly] = (UINT16)-1;
 	}
 	else
-		P_SetPlayerMobjState(tails, S_PLAY_FALL1);
+		P_SetPlayerMobjState(tails, S_KART_STND1); // SRB2kart - was S_PLAY_FALL1
 	P_SetScale(tails, sonic->scale);
 	tails->destscale = sonic->destscale;
 }

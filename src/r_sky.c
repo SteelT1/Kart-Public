@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // Copyright (C) 1993-1996 by id Software, Inc.
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -80,5 +80,8 @@ void R_SetupSkyDraw(void)
 void R_SetSkyScale(void)
 {
 	fixed_t difference = vid.fdupx-(vid.dupx<<FRACBITS);
-	skyscale = FixedDiv(FRACUNIT, vid.fdupx+difference);
+	fixed_t scr = FRACUNIT;
+	if (splitscreen > 1)
+		scr *= 2;
+	skyscale = FixedDiv(scr, vid.fdupx+difference);
 }

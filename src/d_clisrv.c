@@ -1,7 +1,7 @@
 // SONIC ROBO BLAST 2
 //-----------------------------------------------------------------------------
 // Copyright (C) 1998-2000 by DooM Legacy Team.
-// Copyright (C) 1999-2016 by Sonic Team Junior.
+// Copyright (C) 1999-2018 by Sonic Team Junior.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -25,6 +25,7 @@
 #include "g_game.h"
 #include "hu_stuff.h"
 #include "keys.h"
+#include "g_input.h" // JOY1
 #include "m_menu.h"
 #include "console.h"
 #include "d_netfil.h"
@@ -43,6 +44,7 @@
 #include "lzf.h"
 #include "lua_script.h"
 #include "lua_hook.h"
+#include "k_kart.h"
 
 #ifdef CLIENT_LOADINGSCREEN
 // cl loading screen
@@ -83,7 +85,7 @@ UINT8 playernode[MAXPLAYERS];
 
 // Minimum timeout for sending the savegame
 // The actual timeout will be longer depending on the savegame length
-tic_t jointimeout = (10*TICRATE);
+tic_t jointimeout = (3*TICRATE);
 static boolean sendingsavegame[MAXNETNODES]; // Are we sending the savegame?
 static tic_t freezetimeout[MAXNETNODES]; // Until when can this node freeze the server before getting a timeout?
 
@@ -94,7 +96,9 @@ UINT32 playerpingtable[MAXPLAYERS]; //table of player latency values.
 #endif
 SINT8 nodetoplayer[MAXNETNODES];
 SINT8 nodetoplayer2[MAXNETNODES]; // say the numplayer for this node if any (splitscreen)
-UINT8 playerpernode[MAXNETNODES]; // used specialy for scplitscreen
+SINT8 nodetoplayer3[MAXNETNODES]; // say the numplayer for this node if any (splitscreen == 2)
+SINT8 nodetoplayer4[MAXNETNODES]; // say the numplayer for this node if any (splitscreen == 3)
+UINT8 playerpernode[MAXNETNODES]; // used specialy for splitscreen
 boolean nodeingame[MAXNETNODES]; // set false as nodes leave game
 static tic_t nettics[MAXNETNODES]; // what tic the client have received
 static tic_t supposedtics[MAXNETNODES]; // nettics prevision for smaller packet
@@ -115,15 +119,22 @@ static UINT8 resynch_local_inprogress = false; // WE are desynched and getting p
 static UINT8 player_joining = false;
 UINT8 hu_resynching = 0;
 
+// kart, true when a player is connecting or disconnecting so that the gameplay has stopped in its tracks
+UINT8 hu_stopped = 0;
+
 // Client specific
 static ticcmd_t localcmds;
 static ticcmd_t localcmds2;
+static ticcmd_t localcmds3;
+static ticcmd_t localcmds4;
 static boolean cl_packetmissed;
 // here it is for the secondary local player (splitscreen)
 static UINT8 mynode; // my address pointofview server
 
 static UINT8 localtextcmd[MAXTEXTCMD];
 static UINT8 localtextcmd2[MAXTEXTCMD]; // splitscreen
+static UINT8 localtextcmd3[MAXTEXTCMD]; // splitscreen == 2
+static UINT8 localtextcmd4[MAXTEXTCMD]; // splitscreen == 3
 static tic_t neededtic;
 SINT8 servernode = 0; // the number of the server node
 /// \brief do we accept new players?
@@ -153,7 +164,7 @@ ticcmd_t netcmds[BACKUPTICS][MAXPLAYERS];
 static textcmdtic_t *textcmds[TEXTCMD_HASH_SIZE] = {NULL};
 
 
-static consvar_t cv_showjoinaddress = {"showjoinaddress", "On", 0, CV_OnOff, NULL, 0, NULL, NULL, 0, 0, NULL};
+consvar_t cv_showjoinaddress = {"showjoinaddress", "On", 0, CV_OnOff, NULL, 0, NULL, NULL, 0, 0, NULL};
 
 static CV_PossibleValue_t playbackspeed_cons_t[] = {{1, "MIN"}, {10, "MAX"}, {0, NULL}};
 consvar_t cv_playbackspeed = {"playbackspeed", "1", 0, playbackspeed_cons_t, NULL, 0, NULL, NULL, 0, 0, NULL};
@@ -259,6 +270,38 @@ void SendNetXCmd2(netxcmd_t id, const void *param, size_t nparam)
 	{
 		M_Memcpy(&localtextcmd2[localtextcmd2[0]+1], param, nparam);
 		localtextcmd2[0] = (UINT8)(localtextcmd2[0] + (UINT8)nparam);
+	}
+}
+
+void SendNetXCmd3(netxcmd_t id, const void *param, size_t nparam)
+{
+	if (localtextcmd3[0]+2+nparam > MAXTEXTCMD)
+	{
+		I_Error("No more place in the buffer for netcmd %d\n",id);
+		return;
+	}
+	localtextcmd3[0]++;
+	localtextcmd3[localtextcmd3[0]] = (UINT8)id;
+	if (param && nparam)
+	{
+		M_Memcpy(&localtextcmd3[localtextcmd3[0]+1], param, nparam);
+		localtextcmd3[0] = (UINT8)(localtextcmd3[0] + (UINT8)nparam);
+	}
+}
+
+void SendNetXCmd4(netxcmd_t id, const void *param, size_t nparam)
+{
+	if (localtextcmd4[0]+2+nparam > MAXTEXTCMD)
+	{
+		I_Error("No more place in the buffer for netcmd %d\n",id);
+		return;
+	}
+	localtextcmd4[0]++;
+	localtextcmd4[localtextcmd4[0]] = (UINT8)id;
+	if (param && nparam)
+	{
+		M_Memcpy(&localtextcmd4[localtextcmd4[0]+1], param, nparam);
+		localtextcmd4[0] = (UINT8)(localtextcmd4[0] + (UINT8)nparam);
 	}
 }
 
@@ -401,8 +444,7 @@ static void ExtraDataTicker(void)
 							DEBFILE(va("player %d kicked [gametic=%u] reason as follows:\n", i, gametic));
 						}
 						CONS_Alert(CONS_WARNING, M_GetText("Got unknown net command [%s]=%d (max %d)\n"), sizeu1(curpos - bufferstart), *curpos, bufferstart[0]);
-						D_FreeTextcmd(gametic);
-						return;
+						break;
 					}
 				}
 			}
@@ -433,6 +475,8 @@ void D_ResetTiccmds(void)
 
 	memset(&localcmds, 0, sizeof(ticcmd_t));
 	memset(&localcmds2, 0, sizeof(ticcmd_t));
+	memset(&localcmds3, 0, sizeof(ticcmd_t));
+	memset(&localcmds4, 0, sizeof(ticcmd_t));
 
 	// Reset the net command list
 	for (i = 0; i < TEXTCMD_HASH_SIZE; i++)
@@ -517,6 +561,10 @@ static inline void resynch_write_player(resynch_pak *rsp, const size_t i)
 
 	for (j = 0; j < NUMPOWERS; ++j)
 		rsp->powers[j] = (UINT16)SHORT(players[i].powers[j]);
+	for (j = 0; j < NUMKARTSTUFF; ++j)
+		rsp->kartstuff[j] = LONG(players[i].kartstuff[j]); // SRB2kart
+
+	rsp->frameangle = (angle_t)LONG(players[i].frameangle); // SRB2kart
 
 	// Score is resynched in the rspfirm resync packet
 	rsp->health = 0; // resynched with mo health
@@ -530,6 +578,10 @@ static inline void resynch_write_player(resynch_pak *rsp, const size_t i)
 	rsp->skin = LONG(players[i].skin);
 	// Just in case Lua does something like
 	// modify these at runtime
+	// SRB2kart
+	rsp->kartspeed = (UINT8)players[i].kartspeed;
+	rsp->kartweight = (UINT8)players[i].kartweight;
+	//
 	rsp->normalspeed = (fixed_t)LONG(players[i].normalspeed);
 	rsp->runspeed = (fixed_t)LONG(players[i].runspeed);
 	rsp->thrustfactor = players[i].thrustfactor;
@@ -594,6 +646,8 @@ static inline void resynch_write_player(resynch_pak *rsp, const size_t i)
 	rsp->timeshit = players[i].timeshit;
 	rsp->onconveyor = LONG(players[i].onconveyor);
 
+	rsp->jointime = (tic_t)LONG(players[i].jointime);
+
 	rsp->hasmo = false;
 	//Transfer important mo information if the player has a body.
 	//This lets us resync players even if they are dead.
@@ -604,26 +658,26 @@ static inline void resynch_write_player(resynch_pak *rsp, const size_t i)
 	rsp->health = LONG(players[i].mo->health);
 
 	rsp->angle = (angle_t)LONG(players[i].mo->angle);
-	rsp->x = LONG(players[i].mo->x);
-	rsp->y = LONG(players[i].mo->y);
-	rsp->z = LONG(players[i].mo->z);
-	rsp->momx = LONG(players[i].mo->momx);
-	rsp->momy = LONG(players[i].mo->momy);
-	rsp->momz = LONG(players[i].mo->momz);
-	rsp->friction = LONG(players[i].mo->friction);
-	rsp->movefactor = LONG(players[i].mo->movefactor);
+	rsp->x = (fixed_t)LONG(players[i].mo->x);
+	rsp->y = (fixed_t)LONG(players[i].mo->y);
+	rsp->z = (fixed_t)LONG(players[i].mo->z);
+	rsp->momx = (fixed_t)LONG(players[i].mo->momx);
+	rsp->momy = (fixed_t)LONG(players[i].mo->momy);
+	rsp->momz = (fixed_t)LONG(players[i].mo->momz);
+	rsp->friction = (fixed_t)LONG(players[i].mo->friction);
+	rsp->movefactor = (fixed_t)LONG(players[i].mo->movefactor);
 
 	rsp->tics = LONG(players[i].mo->tics);
 	rsp->statenum = (statenum_t)LONG(players[i].mo->state-states); // :(
+	rsp->flags = (UINT32)LONG(players[i].mo->flags);
+	rsp->flags2 = (UINT32)LONG(players[i].mo->flags2);
 	rsp->eflags = (UINT16)SHORT(players[i].mo->eflags);
-	rsp->flags = LONG(players[i].mo->flags);
-	rsp->flags2 = LONG(players[i].mo->flags2);
 
-	rsp->radius = LONG(players[i].mo->radius);
-	rsp->height = LONG(players[i].mo->height);
-	rsp->scale = LONG(players[i].mo->scale);
-	rsp->destscale = LONG(players[i].mo->destscale);
-	rsp->scalespeed = LONG(players[i].mo->scalespeed);
+	rsp->radius = (fixed_t)LONG(players[i].mo->radius);
+	rsp->height = (fixed_t)LONG(players[i].mo->height);
+	rsp->scale = (fixed_t)LONG(players[i].mo->scale);
+	rsp->destscale = (fixed_t)LONG(players[i].mo->destscale);
+	rsp->scalespeed = (fixed_t)LONG(players[i].mo->scalespeed);
 }
 
 static void resynch_read_player(resynch_pak *rsp)
@@ -643,6 +697,10 @@ static void resynch_read_player(resynch_pak *rsp)
 
 	for (j = 0; j < NUMPOWERS; ++j)
 		players[i].powers[j] = (UINT16)SHORT(rsp->powers[j]);
+	for (j = 0; j < NUMKARTSTUFF; ++j)
+		players[i].kartstuff[j] = LONG(rsp->kartstuff[j]); // SRB2kart
+
+	players[i].frameangle = (angle_t)LONG(rsp->frameangle); // SRB2kart
 
 	// Score is resynched in the rspfirm resync packet
 	players[i].health = rsp->health;
@@ -656,6 +714,9 @@ static void resynch_read_player(resynch_pak *rsp)
 	players[i].skin = LONG(rsp->skin);
 	// Just in case Lua does something like
 	// modify these at runtime
+	players[i].kartspeed = (UINT8)rsp->kartspeed;
+	players[i].kartweight = (UINT8)rsp->kartweight;
+
 	players[i].normalspeed = (fixed_t)LONG(rsp->normalspeed);
 	players[i].runspeed = (fixed_t)LONG(rsp->runspeed);
 	players[i].thrustfactor = rsp->thrustfactor;
@@ -720,6 +781,8 @@ static void resynch_read_player(resynch_pak *rsp)
 	players[i].timeshit = rsp->timeshit;
 	players[i].onconveyor = LONG(rsp->onconveyor);
 
+	players[i].jointime = (tic_t)LONG(rsp->jointime);
+
 	//We get a packet for each player in game.
 	if (!playeringame[i])
 		return;
@@ -738,27 +801,30 @@ static void resynch_read_player(resynch_pak *rsp)
 
 	//At this point, the player should have a body, whether they were respawned or not.
 	P_UnsetThingPosition(players[i].mo);
-	players[i].mo->angle = (angle_t)LONG(rsp->angle);
-	players[i].mo->eflags = (UINT16)SHORT(rsp->eflags);
-	players[i].mo->flags = LONG(rsp->flags);
-	players[i].mo->flags2 = LONG(rsp->flags2);
-	players[i].mo->friction = LONG(rsp->friction);
 	players[i].mo->health = LONG(rsp->health);
-	players[i].mo->momx = LONG(rsp->momx);
-	players[i].mo->momy = LONG(rsp->momy);
-	players[i].mo->momz = LONG(rsp->momz);
-	players[i].mo->movefactor = LONG(rsp->movefactor);
+
+	players[i].mo->angle = (angle_t)LONG(rsp->angle);
+	players[i].mo->x = (fixed_t)LONG(rsp->x);
+	players[i].mo->y = (fixed_t)LONG(rsp->y);
+	players[i].mo->z = (fixed_t)LONG(rsp->z);
+	players[i].mo->momx = (fixed_t)LONG(rsp->momx);
+	players[i].mo->momy = (fixed_t)LONG(rsp->momy);
+	players[i].mo->momz = (fixed_t)LONG(rsp->momz);
+	players[i].mo->friction = (fixed_t)LONG(rsp->friction);
+	players[i].mo->movefactor = (fixed_t)LONG(rsp->movefactor);
+
 	players[i].mo->tics = LONG(rsp->tics);
-	P_SetMobjStateNF(players[i].mo, LONG(rsp->statenum));
-	players[i].mo->x = LONG(rsp->x);
-	players[i].mo->y = LONG(rsp->y);
-	players[i].mo->z = LONG(rsp->z);
-	players[i].mo->radius = LONG(rsp->radius);
-	players[i].mo->height = LONG(rsp->height);
+	P_SetMobjStateNF(players[i].mo, (statenum_t)LONG(rsp->statenum));
+	players[i].mo->flags = (UINT32)LONG(rsp->flags);
+	players[i].mo->flags2 = (UINT32)LONG(rsp->flags2);
+	players[i].mo->eflags = (UINT16)SHORT(rsp->eflags);
+
+	players[i].mo->radius = (fixed_t)LONG(rsp->radius);
+	players[i].mo->height = (fixed_t)LONG(rsp->height);
 	// P_SetScale is redundant for this, as all related variables are already restored properly.
-	players[i].mo->scale = LONG(rsp->scale);
-	players[i].mo->destscale = LONG(rsp->destscale);
-	players[i].mo->scalespeed = LONG(rsp->scalespeed);
+	players[i].mo->scale = (fixed_t)LONG(rsp->scale);
+	players[i].mo->destscale = (fixed_t)LONG(rsp->destscale);
+	players[i].mo->scalespeed = (fixed_t)LONG(rsp->scalespeed);
 
 	// And finally, SET THE MOBJ SKIN damn it.
 	players[i].mo->skin = &skins[players[i].skin];
@@ -883,8 +949,7 @@ static inline void resynch_write_others(resynchend_pak *rst)
 		{
 			rst->ctfteam[i] = 0;
 			rst->score[i] = 0;
-			rst->numboxes[i] = 0;
-			rst->totalring[i] = 0;
+			rst->marescore[i] = 0;
 			rst->realtime[i] = 0;
 			rst->laps[i] = 0;
 			continue;
@@ -894,8 +959,7 @@ static inline void resynch_write_others(resynchend_pak *rst)
 			rst->ingame |= (1<<i);
 		rst->ctfteam[i] = (INT32)LONG(players[i].ctfteam);
 		rst->score[i] = (UINT32)LONG(players[i].score);
-		rst->numboxes[i] = SHORT(players[i].numboxes);
-		rst->totalring[i] = SHORT(players[i].totalring);
+		rst->marescore[i] = (UINT32)LONG(players[i].marescore);
 		rst->realtime[i] = (tic_t)LONG(players[i].realtime);
 		rst->laps[i] = players[i].laps;
 	}
@@ -915,8 +979,7 @@ static inline void resynch_read_others(resynchend_pak *p)
 		players[i].spectator = !(loc_ingame & (1<<i));
 		players[i].ctfteam = (INT32)LONG(p->ctfteam[i]); // no, 0 does not mean spectator, at least not in Match
 		players[i].score = (UINT32)LONG(p->score[i]);
-		players[i].numboxes = SHORT(p->numboxes[i]);
-		players[i].totalring = SHORT(p->totalring[i]);
+		players[i].marescore = (UINT32)LONG(p->marescore[i]);
 		players[i].realtime = (tic_t)LONG(p->realtime[i]);
 		players[i].laps = p->laps[i];
 	}
@@ -937,7 +1000,8 @@ static void SV_RequireResynch(INT32 node)
 
 	resynch_delay[node] = 10; // Delay before you can fail sync again
 	resynch_score[node] += 200; // Add score for initial desynch
-	resynch_status[node] = 0xFFFFFFFF; // No players assumed synched
+	for (i = 0; i < MAXPLAYERS; ++i)
+		resynch_status[node] |= (1<<i); // No players assumed synched
 	resynch_inprogress[node] = true; // so we know to send a PT_RESYNCHEND after sync
 
 	// Initial setup
@@ -1109,7 +1173,7 @@ static inline void CL_DrawConnectionStatus(void)
 	INT32 ccstime = I_GetTime();
 
 	// Draw background fade
-	V_DrawFadeScreen();
+	V_DrawFadeScreen(0xFF00, 16);
 
 	// Draw the bottom box.
 	M_DrawTextBox(BASEVIDWIDTH/2-128-8, BASEVIDHEIGHT-24-8, 32, 1);
@@ -1157,22 +1221,37 @@ static inline void CL_DrawConnectionStatus(void)
 		if (lastfilenum != -1)
 		{
 			INT32 dldlength;
-			static char tempname[32];
+			static char tempname[28];
+			fileneeded_t *file = &fileneeded[lastfilenum];
+			char *filename = file->filename;
 
 			Net_GetNetStat();
-			dldlength = (INT32)((fileneeded[lastfilenum].currentsize/(double)fileneeded[lastfilenum].totalsize) * 256);
+			dldlength = (INT32)((file->currentsize/(double)file->totalsize) * 256);
 			if (dldlength > 256)
 				dldlength = 256;
 			V_DrawFill(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-24, 256, 8, 175);
 			V_DrawFill(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-24, dldlength, 8, 160);
 
 			memset(tempname, 0, sizeof(tempname));
-			nameonly(strncpy(tempname, fileneeded[lastfilenum].filename, 31));
+			// offset filename to just the name only part
+			filename += strlen(filename) - nameonlylength(filename);
+
+			if (strlen(filename) > sizeof(tempname)-1) // too long to display fully
+			{
+				size_t endhalfpos = strlen(filename)-10;
+				// display as first 14 chars + ... + last 10 chars
+				// which should add up to 27 if our math(s) is correct
+				snprintf(tempname, sizeof(tempname), "%.14s...%.10s", filename, filename+endhalfpos);
+			}
+			else // we can copy the whole thing in safely
+			{
+				strncpy(tempname, filename, sizeof(tempname)-1);
+			}
 
 			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-24-32, V_YELLOWMAP,
 				va(M_GetText("Downloading \"%s\""), tempname));
 			V_DrawString(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-24, V_20TRANS|V_MONOSPACE,
-				va(" %4uK/%4uK",fileneeded[lastfilenum].currentsize>>10,fileneeded[lastfilenum].totalsize>>10));
+				va(" %4uK/%4uK",fileneeded[lastfilenum].currentsize>>10,file->totalsize>>10));
 			V_DrawRightAlignedString(BASEVIDWIDTH/2+128, BASEVIDHEIGHT-24, V_20TRANS|V_MONOSPACE,
 				va("%3.1fK/s ", ((double)getbps)/1024));
 		}
@@ -1200,8 +1279,11 @@ static boolean CL_SendJoin(void)
 		CONS_Printf(M_GetText("Sending join request...\n"));
 	netbuffer->packettype = PT_CLIENTJOIN;
 
-	if (splitscreen || botingame)
+	if (splitscreen)
+		localplayers += splitscreen;
+	else if (botingame)
 		localplayers++;
+
 	netbuffer->u.clientcfg.localplayers = localplayers;
 	netbuffer->u.clientcfg.version = VERSION;
 	netbuffer->u.clientcfg.subversion = SUBVERSION;
@@ -1221,8 +1303,8 @@ static void SV_SendServerInfo(INT32 node, tic_t servertime)
 	netbuffer->u.serverinfo.leveltime = (tic_t)LONG(leveltime);
 
 	netbuffer->u.serverinfo.numberofplayer = (UINT8)D_NumPlayers();
-	netbuffer->u.serverinfo.maxplayer = (UINT8)cv_maxplayers.value;
-	netbuffer->u.serverinfo.gametype = (UINT8)gametype;
+	netbuffer->u.serverinfo.maxplayer = (UINT8)(min((dedicated ? MAXPLAYERS-1 : MAXPLAYERS), cv_maxplayers.value));
+	netbuffer->u.serverinfo.gametype = (UINT8)(G_BattleGametype() ? VANILLA_GT_MATCH : VANILLA_GT_RACE); // SRB2Kart: Vanilla's gametype constants for MS support
 	netbuffer->u.serverinfo.modifiedgame = (UINT8)modifiedgame;
 	netbuffer->u.serverinfo.cheatsenabled = CV_CheatsEnabled();
 	netbuffer->u.serverinfo.isdedicated = (UINT8)dedicated;
@@ -1232,19 +1314,62 @@ static void SV_SendServerInfo(INT32 node, tic_t servertime)
 
 	M_Memcpy(netbuffer->u.serverinfo.mapmd5, mapmd5, 16);
 
-	if (strcmp(mapheaderinfo[gamemap-1]->lvlttl, ""))
-		strncpy(netbuffer->u.serverinfo.maptitle, (char *)mapheaderinfo[gamemap-1]->lvlttl, 33);
+	if (!(mapheaderinfo[gamemap-1]->levelflags & LF_NOZONE) && !(mapheaderinfo[prevmap]->zonttl[0]))
+		netbuffer->u.serverinfo.iszone = 1;
+	else
+		netbuffer->u.serverinfo.iszone = 0;
+
+	memset(netbuffer->u.serverinfo.maptitle, 0, 33);
+
+	if (!(mapheaderinfo[gamemap-1]->menuflags & LF2_HIDEINMENU) && mapheaderinfo[gamemap-1]->lvlttl[0])
+	{
+		//strncpy(netbuffer->u.serverinfo.maptitle, (char *)mapheaderinfo[gamemap-1]->lvlttl, 33);
+		// set up the levelstring
+		if (netbuffer->u.serverinfo.iszone || (mapheaderinfo[gamemap-1]->levelflags & LF_NOZONE))
+		{
+			if (mapheaderinfo[gamemap-1]->actnum[0])
+				snprintf(netbuffer->u.serverinfo.maptitle,
+					33,
+					"%s %s",
+					mapheaderinfo[gamemap-1]->lvlttl, mapheaderinfo[gamemap-1]->actnum);
+			else
+				snprintf(netbuffer->u.serverinfo.maptitle,
+					33,
+					"%s",
+					mapheaderinfo[gamemap-1]->lvlttl);
+		}
+		else
+		{
+			if (mapheaderinfo[gamemap-1]->actnum[0])
+			{
+				if (snprintf(netbuffer->u.serverinfo.maptitle,
+					33,
+					"%s %s %s",
+					mapheaderinfo[gamemap-1]->lvlttl, mapheaderinfo[gamemap-1]->zonttl, mapheaderinfo[gamemap-1]->actnum) < 0)
+				{
+					// If there's an encoding error, send UNKNOWN, we accept that the above may be truncated
+					strncpy(netbuffer->u.serverinfo.maptitle, "UNKNOWN", 33);
+				}
+			}
+			else
+			{
+				if (snprintf(netbuffer->u.serverinfo.maptitle,
+					33,
+					"%s %s",
+					mapheaderinfo[gamemap-1]->lvlttl, mapheaderinfo[gamemap-1]->zonttl) < 0)
+				{
+					// If there's an encoding error, send UNKNOWN, we accept that the above may be truncated
+					strncpy(netbuffer->u.serverinfo.maptitle, "UNKNOWN", 33);
+				}
+			}
+		}
+	}
 	else
 		strncpy(netbuffer->u.serverinfo.maptitle, "UNKNOWN", 33);
 
 	netbuffer->u.serverinfo.maptitle[32] = '\0';
 
-	if (!(mapheaderinfo[gamemap-1]->levelflags & LF_NOZONE))
-		netbuffer->u.serverinfo.iszone = 1;
-	else
-		netbuffer->u.serverinfo.iszone = 0;
-
-	netbuffer->u.serverinfo.actnum = mapheaderinfo[gamemap-1]->actnum;
+	netbuffer->u.serverinfo.actnum = 0; //mapheaderinfo[gamemap-1]->actnum
 
 	p = PutFileNeeded();
 
@@ -1312,7 +1437,8 @@ static void SV_SendPlayerInfo(INT32 node)
 		netbuffer->u.playerinfo[i].skin = (UINT8)players[i].skin;
 
 		// Extra data
-		netbuffer->u.playerinfo[i].data = players[i].skincolor;
+		// Kart has extra skincolors, so we can't use this
+		netbuffer->u.playerinfo[i].data = 0; //netbuffer->u.playerinfo[i].data = players[i].skincolor;
 
 		if (players[i].pflags & PF_TAGIT)
 			netbuffer->u.playerinfo[i].data |= 0x20;
@@ -1351,17 +1477,21 @@ static boolean SV_SendServerConfig(INT32 node)
 	netbuffer->u.servercfg.gamestate = (UINT8)gamestate;
 	netbuffer->u.servercfg.gametype = (UINT8)gametype;
 	netbuffer->u.servercfg.modifiedgame = (UINT8)modifiedgame;
-	netbuffer->u.servercfg.adminplayer = (SINT8)adminplayer;
 
 	// we fill these structs with FFs so that any players not in game get sent as 0xFFFF
 	// which is nice and easy for us to detect
 	memset(netbuffer->u.servercfg.playerskins, 0xFF, sizeof(netbuffer->u.servercfg.playerskins));
 	memset(netbuffer->u.servercfg.playercolor, 0xFF, sizeof(netbuffer->u.servercfg.playercolor));
 
+	memset(netbuffer->u.servercfg.adminplayers, -1, sizeof(netbuffer->u.servercfg.adminplayers));
+
 	for (i = 0; i < MAXPLAYERS; i++)
 	{
+		netbuffer->u.servercfg.adminplayers[i] = (SINT8)adminplayers[i];
+
 		if (!playeringame[i])
 			continue;
+
 		netbuffer->u.servercfg.playerskins[i] = (UINT8)players[i].skin;
 		netbuffer->u.servercfg.playercolor[i] = (UINT8)players[i].skincolor;
 	}
@@ -1481,7 +1611,7 @@ static void SV_SavedGame(void)
 {
 	size_t length;
 	UINT8 *savebuffer;
-	XBOXSTATIC char tmpsave[256];
+	XBOXSTATIC char tmpsave[264];
 
 	if (!cv_dumpconsistency.value)
 		return;
@@ -1523,7 +1653,7 @@ static void CL_LoadReceivedSavegame(void)
 {
 	UINT8 *savebuffer = NULL;
 	size_t length, decompressedlen;
-	XBOXSTATIC char tmpsave[256];
+	XBOXSTATIC char tmpsave[264];
 
 	sprintf(tmpsave, "%s" PATHSEP TMPSAVENAME, srb2home);
 
@@ -1554,21 +1684,20 @@ static void CL_LoadReceivedSavegame(void)
 	automapactive = false;
 
 	// load a base level
-	playerdeadview = false;
-
 	if (P_LoadNetGame())
 	{
-		const INT32 actnum = mapheaderinfo[gamemap-1]->actnum;
-		CONS_Printf(M_GetText("Map is now \"%s"), G_BuildMapName(gamemap));
-		if (strcmp(mapheaderinfo[gamemap-1]->lvlttl, ""))
+		CON_LogMessage(va(M_GetText("Map is now \"%s"), G_BuildMapName(gamemap)));
+		if (strlen(mapheaderinfo[gamemap-1]->lvlttl) > 0)
 		{
-			CONS_Printf(": %s", mapheaderinfo[gamemap-1]->lvlttl);
-			if (!(mapheaderinfo[gamemap-1]->levelflags & LF_NOZONE))
-				CONS_Printf(M_GetText(" ZONE"));
-			if (actnum > 0)
-				CONS_Printf(" %2d", actnum);
+			CON_LogMessage(va(": %s", mapheaderinfo[gamemap-1]->lvlttl));
+			if (strlen(mapheaderinfo[gamemap-1]->zonttl) > 0)
+				CON_LogMessage(va(" %s", mapheaderinfo[gamemap-1]->zonttl));
+			else if (!(mapheaderinfo[gamemap-1]->levelflags & LF_NOZONE))
+				CON_LogMessage(M_GetText(" ZONE"));
+			if (strlen(mapheaderinfo[gamemap-1]->actnum) > 0)
+				CON_LogMessage(va(" %s", mapheaderinfo[gamemap-1]->actnum));
 		}
-		CONS_Printf("\"\n");
+		CON_LogMessage("\"\n");
 	}
 	else
 	{
@@ -1611,6 +1740,8 @@ static void SendAskInfo(INT32 node, boolean viams)
 serverelem_t serverlist[MAXSERVERLIST];
 UINT32 serverlistcount = 0;
 
+#define FORCECLOSE 0x8000
+
 static void SL_ClearServerList(INT32 connectedserver)
 {
 	UINT32 i;
@@ -1618,7 +1749,7 @@ static void SL_ClearServerList(INT32 connectedserver)
 	for (i = 0; i < serverlistcount; i++)
 		if (connectedserver != serverlist[i].node)
 		{
-			Net_CloseConnection(serverlist[i].node);
+			Net_CloseConnection(serverlist[i].node|FORCECLOSE);
 			serverlist[i].node = 0;
 		}
 	serverlistcount = 0;
@@ -1700,12 +1831,25 @@ void CL_UpdateServerList(boolean internetsearch, INT32 room)
 				// Make sure MS version matches our own, to
 				// thwart nefarious servers who lie to the MS.
 
-				if(strcmp(version, server_list[i].version) == 0)
+				if (strcmp(version, server_list[i].version) == 0)
 				{
 					INT32 node = I_NetMakeNodewPort(server_list[i].ip, server_list[i].port);
 					if (node == -1)
 						break; // no more node free
 					SendAskInfo(node, true);
+					// Force close the connection so that servers can't eat
+					// up nodes forever if we never get a reply back from them
+					// (usually when they've not forwarded their ports).
+					//
+					// Don't worry, we'll get in contact with the working
+					// servers again when they send SERVERINFO to us later!
+					//
+					// (Note: as a side effect this probably means every
+					// server in the list will probably be using the same node (e.g. node 1),
+					// not that it matters which nodes they use when
+					// the connections are closed afterwards anyway)
+					// -- Monster Iestyn 12/11/18
+					Net_CloseConnection(node|FORCECLOSE);
 				}
 			}
 		}
@@ -1775,7 +1919,7 @@ static boolean CL_ServerConnectionSearchTicker(boolean viams, tic_t *asksent)
 				M_StartMessage(M_GetText(
 					"You have too many WAD files loaded\n"
 					"to add ones the server is using.\n"
-					"Please restart SRB2 before connecting.\n\n"
+					"Please restart SRB2Kart before connecting.\n\n"
 					"Press ESC\n"
 				), NULL, MM_NOTHING);
 				return false;
@@ -1790,7 +1934,7 @@ static boolean CL_ServerConnectionSearchTicker(boolean viams, tic_t *asksent)
 					"modified the game in some way, and\n"
 					"your file list does not match\n"
 					"the server's file list.\n"
-					"Please restart SRB2 before connecting.\n\n"
+					"Please restart SRB2Kart before connecting.\n\n"
 					"Press ESC\n"
 				), NULL, MM_NOTHING);
 				return false;
@@ -1932,7 +2076,8 @@ static boolean CL_ServerConnectionTicker(boolean viams, const char *tmpsave, tic
 
 		I_OsPolling();
 		key = I_GetKey();
-		if (key == KEY_ESCAPE)
+		// Only ESC and non-keyboard keys abort connection
+		if (key == KEY_ESCAPE || key >= KEY_MOUSE1)
 		{
 			CONS_Printf(M_GetText("Network game synchronization aborted.\n"));
 //				M_StartMessage(M_GetText("Network game synchronization aborted.\n\nPress ESC\n"), NULL, MM_NOTHING);
@@ -1983,7 +2128,7 @@ static void CL_ConnectToServer(boolean viams)
 	tic_t asksent;
 #endif
 #ifdef JOININGAME
-	XBOXSTATIC char tmpsave[256];
+	XBOXSTATIC char tmpsave[264];
 
 	sprintf(tmpsave, "%s" PATHSEP TMPSAVENAME, srb2home);
 #endif
@@ -2010,12 +2155,14 @@ static void CL_ConnectToServer(boolean viams)
 
 	if (gamestate == GS_INTERMISSION)
 		Y_EndIntermission(); // clean up intermission graphics etc
+	if (gamestate == GS_VOTING)
+		Y_EndVote();
 
 	DEBFILE(va("waiting %d nodes\n", doomcom->numnodes));
 	G_SetGamestate(GS_WAITINGPLAYERS);
 	wipegamestate = GS_WAITINGPLAYERS;
 
-	adminplayer = -1;
+	ClearAdminPlayers();
 	pnumnodes = 1;
 	oldtic = I_GetTime() - 1;
 #ifndef NONET
@@ -2064,6 +2211,10 @@ static void CL_ConnectToServer(boolean viams)
 	}
 	while (!(cl_mode == CL_CONNECTED && (client || (server && nodewaited <= pnumnodes))));
 
+#ifndef NONET
+	if (netgame)
+		F_StartWaitingPlayers();
+#endif
 	DEBFILE(va("Synchronisation Finished\n"));
 
 	displayplayer = consoleplayer;
@@ -2229,7 +2380,7 @@ static void Command_connect(void)
 	// Assume we connect directly.
 	boolean viams = false;
 
-	if (COM_Argc() < 2)
+	if (COM_Argc() < 2 || *COM_Argv(1) == 0)
 	{
 		CONS_Printf(M_GetText(
 			"Connect <serveraddress> (port): connect to a server\n"
@@ -2295,8 +2446,11 @@ static void Command_connect(void)
 			CONS_Alert(CONS_ERROR, M_GetText("There is no network driver\n"));
 	}
 
-	splitscreen = false;
-	SplitScreen_OnChange();
+	if (splitscreen != cv_splitplayers.value-1)
+	{
+		splitscreen = cv_splitplayers.value-1;
+		SplitScreen_OnChange();
+	}
 	botingame = false;
 	botskin = 0;
 	CL_ConnectToServer(viams);
@@ -2327,7 +2481,7 @@ void CL_ClearPlayer(INT32 playernum)
 //
 // Removes a player from the current game
 //
-static void CL_RemovePlayer(INT32 playernum)
+static void CL_RemovePlayer(INT32 playernum, INT32 reason)
 {
 	// Sanity check: exceptional cases (i.e. c-fails) can cause multiple
 	// kick commands to be issued for the same player.
@@ -2337,17 +2491,21 @@ static void CL_RemovePlayer(INT32 playernum)
 	if (server && !demoplayback)
 	{
 		INT32 node = playernode[playernum];
+		//playerpernode[node] = 0; // It'd be better to remove them all at once, but ghosting happened, so continue to let CL_RemovePlayer do it one-by-one
 		playerpernode[node]--;
 		if (playerpernode[node] <= 0)
 		{
 			// If a resynch was in progress, well, it no longer needs to be.
-			SV_InitResynchVars(playernode[playernum]);
+			SV_InitResynchVars(node);
 
-			nodeingame[playernode[playernum]] = false;
-			Net_CloseConnection(playernode[playernum]);
+			nodeingame[node] = false;
+			Net_CloseConnection(node);
 			ResetNode(node);
 		}
 	}
+
+	if (K_IsPlayerWanted(&players[playernum]))
+		K_CalculateBattleWanted();
 
 	if (gametype == GT_CTF)
 		P_PlayerFlagBurst(&players[playernum], false); // Don't take the flag with you!
@@ -2382,6 +2540,10 @@ static void CL_RemovePlayer(INT32 playernum)
 		}
 	}
 
+#ifdef HAVE_BLUA
+	LUAh_PlayerQuit(&players[playernum], reason); // Lua hook for player quitting
+#endif
+
 	// Reset player data
 	CL_ClearPlayer(playernum);
 
@@ -2394,8 +2556,10 @@ static void CL_RemovePlayer(INT32 playernum)
 	// Reset the name
 	sprintf(player_names[playernum], "Player %d", playernum+1);
 
-	if (playernum == adminplayer)
-		adminplayer = -1; // don't stay admin after you're gone
+	if (IsPlayerAdmin(playernum))
+	{
+		RemoveAdminPlayer(playernum); // don't stay admin after you're gone
+	}
 
 	if (playernum == displayplayer)
 		displayplayer = consoleplayer; // don't look through someone's view who isn't there
@@ -2404,9 +2568,11 @@ static void CL_RemovePlayer(INT32 playernum)
 	LUA_InvalidatePlayer(&players[playernum]);
 #endif
 
-	if (G_TagGametype()) //Check if you still have a game. Location flexible. =P
+	/*if (G_TagGametype()) //Check if you still have a game. Location flexible. =P
 		P_CheckSurvivors();
-	else if (gametype == GT_RACE || gametype == GT_COMPETITION)
+	else*/ if (G_BattleGametype()) // SRB2Kart
+		K_CheckBumpers();
+	else if (G_RaceGametype())
 		P_CheckRacers();
 }
 
@@ -2513,7 +2679,7 @@ static void Command_Nodes(void)
 			if (I_GetNodeAddress && (address = I_GetNodeAddress(playernode[i])) != NULL)
 				CONS_Printf(" - %s", address);
 
-			if (i == adminplayer)
+			if (IsPlayerAdmin(i))
 				CONS_Printf(M_GetText(" (verified admin)"));
 
 			if (players[i].spectator)
@@ -2538,7 +2704,7 @@ static void Command_Ban(void)
 		return;
 	}
 
-	if (server || adminplayer == consoleplayer)
+	if (server || IsPlayerAdmin(consoleplayer))
 	{
 		XBOXSTATIC UINT8 buf[3 + MAX_REASONLENGTH];
 		UINT8 *p = buf;
@@ -2604,7 +2770,7 @@ static void Command_Kick(void)
 		return;
 	}
 
-	if (server || adminplayer == consoleplayer)
+	if (server || IsPlayerAdmin(consoleplayer))
 	{
 		XBOXSTATIC UINT8 buf[3 + MAX_REASONLENGTH];
 		UINT8 *p = buf;
@@ -2613,13 +2779,16 @@ static void Command_Kick(void)
 		if (pn == -1 || pn == 0)
 			return;
 
-		// Special case if we are trying to kick a player who is downloading the game state:
-		// trigger a timeout instead of kicking them, because a kick would only
-		// take effect after they have finished downloading
-		if (sendingsavegame[playernode[pn]])
+		if (server)
 		{
-			Net_ConnectionTimeout(playernode[pn]);
-			return;
+			// Special case if we are trying to kick a player who is downloading the game state:
+			// trigger a timeout instead of kicking them, because a kick would only
+			// take effect after they have finished downloading
+			if (sendingsavegame[playernode[pn]])
+			{
+				Net_ConnectionTimeout(playernode[pn]);
+				return;
+			}
 		}
 
 		WRITESINT8(p, pn);
@@ -2657,11 +2826,12 @@ static void Got_KickCmd(UINT8 **p, INT32 playernum)
 	INT32 pnum, msg;
 	XBOXSTATIC char buf[3 + MAX_REASONLENGTH];
 	char *reason = buf;
+	kickreason_t kickreason = KR_KICK;
 
 	pnum = READUINT8(*p);
 	msg = READUINT8(*p);
 
-	if (pnum == serverplayer && playernum == adminplayer)
+	if (pnum == serverplayer && IsPlayerAdmin(playernum))
 	{
 		CONS_Printf(M_GetText("Server is being shut down remotely. Goodbye!\n"));
 
@@ -2672,9 +2842,9 @@ static void Got_KickCmd(UINT8 **p, INT32 playernum)
 	}
 
 	// Is playernum authorized to make this kick?
-	if (playernum != serverplayer && playernum != adminplayer
-		&& !(playerpernode[playernode[playernum]] == 2
-		&& nodetoplayer2[playernode[playernum]] == pnum))
+	if (playernum != serverplayer && !IsPlayerAdmin(playernum)
+		/*&& !(playerpernode[playernode[playernum]] == 2
+		//&& nodetoplayer2[playernode[playernum]] == pnum)*/)
 	{
 		// We received a kick command from someone who isn't the
 		// server or admin, and who isn't in splitscreen removing
@@ -2685,12 +2855,6 @@ static void Got_KickCmd(UINT8 **p, INT32 playernum)
 		// We deal with this by changing the kick reason to
 		// "consistency failure" and kicking the offending user
 		// instead.
-
-		// Note: Splitscreen in netgames is broken because of
-		// this. Only the server has any idea of which players
-		// are using splitscreen on the same computer, so
-		// clients cannot always determine if a kick is
-		// legitimate.
 
 		CONS_Alert(CONS_WARNING, M_GetText("Illegal kick command received from %s for player %d\n"), player_names[playernum], pnum);
 
@@ -2721,7 +2885,7 @@ static void Got_KickCmd(UINT8 **p, INT32 playernum)
 		msg = KICK_MSG_CON_FAIL;
 	}
 
-	CONS_Printf("\x82%s ", player_names[pnum]);
+	//CONS_Printf("\x82%s ", player_names[pnum]);
 
 	// If a verified admin banned someone, the server needs to know about it.
 	// If the playernum isn't zero (the server) then the server needs to record the ban.
@@ -2738,15 +2902,18 @@ static void Got_KickCmd(UINT8 **p, INT32 playernum)
 	switch (msg)
 	{
 		case KICK_MSG_GO_AWAY:
-			CONS_Printf(M_GetText("has been kicked (Go away)\n"));
+			HU_AddChatText(va("\x82*%s has been kicked (Go away)", player_names[pnum]), false);
+			kickreason = KR_KICK;
 			break;
 #ifdef NEWPING
 		case KICK_MSG_PING_HIGH:
-			CONS_Printf(M_GetText("left the game (Broke ping limit)\n"));
+			HU_AddChatText(va("\x82*%s left the game (Broke ping limit)", player_names[pnum]), false);
+			kickreason = KR_PINGLIMIT;
 			break;
 #endif
 		case KICK_MSG_CON_FAIL:
-			CONS_Printf(M_GetText("left the game (Synch failure)\n"));
+			HU_AddChatText(va("\x82*%s left the game (Synch Failure)", player_names[pnum]), false);
+			kickreason = KR_SYNCH;
 
 			if (M_CheckParm("-consisdump")) // Helps debugging some problems
 			{
@@ -2782,26 +2949,31 @@ static void Got_KickCmd(UINT8 **p, INT32 playernum)
 			}
 			break;
 		case KICK_MSG_TIMEOUT:
-			CONS_Printf(M_GetText("left the game (Connection timeout)\n"));
+			HU_AddChatText(va("\x82*%s left the game (Connection timeout)", player_names[pnum]), false);
+			kickreason = KR_TIMEOUT;
 			break;
 		case KICK_MSG_PLAYER_QUIT:
 			if (netgame) // not splitscreen/bots
-				CONS_Printf(M_GetText("left the game\n"));
+				HU_AddChatText(va("\x82*%s left the game", player_names[pnum]), false);
+			kickreason = KR_LEAVE;
 			break;
 		case KICK_MSG_BANNED:
-			CONS_Printf(M_GetText("has been banned (Don't come back)\n"));
+			HU_AddChatText(va("\x82*%s has been banned (Don't come back)", player_names[pnum]), false);
+			kickreason = KR_BAN;
 			break;
 		case KICK_MSG_CUSTOM_KICK:
 			READSTRINGN(*p, reason, MAX_REASONLENGTH+1);
-			CONS_Printf(M_GetText("has been kicked (%s)\n"), reason);
+			HU_AddChatText(va("\x82*%s has been kicked (%s)", player_names[pnum], reason), false);
+			kickreason = KR_KICK;
 			break;
 		case KICK_MSG_CUSTOM_BAN:
 			READSTRINGN(*p, reason, MAX_REASONLENGTH+1);
-			CONS_Printf(M_GetText("has been banned (%s)\n"), reason);
+			HU_AddChatText(va("\x82*%s has been banned (%s)", player_names[pnum], reason), false);
+			kickreason = KR_BAN;
 			break;
 	}
 
-	if (pnum == consoleplayer)
+	if (playernode[pnum] == playernode[consoleplayer])
 	{
 #ifdef DUMPCONSISTENCY
 		if (msg == KICK_MSG_CON_FAIL) SV_SavedGame();
@@ -2810,7 +2982,7 @@ static void Got_KickCmd(UINT8 **p, INT32 playernum)
 		CL_Reset();
 		D_StartTitle();
 		if (msg == KICK_MSG_CON_FAIL)
-			M_StartMessage(M_GetText("Server closed connection\n(synch failure)\nPress ESC\n"), NULL, MM_NOTHING);
+			M_StartMessage(M_GetText("Server closed connection\n(Synch failure)\nPress ESC\n"), NULL, MM_NOTHING);
 #ifdef NEWPING
 		else if (msg == KICK_MSG_PING_HIGH)
 			M_StartMessage(M_GetText("Server closed connection\n(Broke ping limit)\nPress ESC\n"), NULL, MM_NOTHING);
@@ -2824,16 +2996,48 @@ static void Got_KickCmd(UINT8 **p, INT32 playernum)
 		else
 			M_StartMessage(M_GetText("You have been kicked by the server\n\nPress ESC\n"), NULL, MM_NOTHING);
 	}
-	else
-		CL_RemovePlayer(pnum);
+	else if (server)
+	{
+		// Sal: Because kicks (and a lot of other commands) are player-based, we can't tell which player pnum is on the node from a glance.
+		// When we want to remove everyone from a node, we have to get the kicked player's node, then remove everyone on that node manually so we don't miss any.
+		// This avoids the bugs with older SRB2 version's online splitscreen kicks, specifically ghosting.
+		// On top of this, it can't just be a CL_RemovePlayer call; it has to be a server-sided.
+		// Clients don't bother setting any nodes for anything but THE server player (even ignoring the server's extra players!), so it'll often remove everyone because they all have node -1/255, insta-desync!
+		// And yes. This is a netxcmd wrap for just CL_RemovePlayer! :V
+
+#define removethisplayer(otherp) \
+	if (otherp >= 0) \
+	{ \
+		buf[0] = (UINT8)otherp; \
+		if (otherp != pnum) \
+		{ \
+			HU_AddChatText(va("\x82*%s left the game (Joined with %s)", player_names[otherp], player_names[pnum]), false); \
+			buf[1] = KR_LEAVE; \
+		} \
+		else \
+			buf[1] = (UINT8)kickreason; \
+		SendNetXCmd(XD_REMOVEPLAYER, &buf, 2); \
+		otherp = -1; \
+	}
+		removethisplayer(nodetoplayer[playernode[pnum]])
+		removethisplayer(nodetoplayer2[playernode[pnum]])
+		removethisplayer(nodetoplayer3[playernode[pnum]])
+		removethisplayer(nodetoplayer4[playernode[pnum]])
+#undef removethisplayer
+	}
 }
 
+static CV_PossibleValue_t netticbuffer_cons_t[] = {{0, "MIN"}, {3, "MAX"}, {0, NULL}};
+consvar_t cv_netticbuffer = {"netticbuffer", "1", CV_SAVE, netticbuffer_cons_t, NULL, 0, NULL, NULL, 0, 0, NULL};
+
 consvar_t cv_allownewplayer = {"allowjoin", "On", CV_NETVAR, CV_OnOff, NULL, 0, NULL, NULL, 0, 0, NULL	};
+#ifdef VANILLAJOINNEXTROUND
 consvar_t cv_joinnextround = {"joinnextround", "Off", CV_NETVAR, CV_OnOff, NULL, 0, NULL, NULL, 0, 0, NULL}; /// \todo not done
-static CV_PossibleValue_t maxplayers_cons_t[] = {{2, "MIN"}, {32, "MAX"}, {0, NULL}};
+#endif
+static CV_PossibleValue_t maxplayers_cons_t[] = {{2, "MIN"}, {MAXPLAYERS, "MAX"}, {0, NULL}};
 consvar_t cv_maxplayers = {"maxplayers", "8", CV_SAVE, maxplayers_cons_t, NULL, 0, NULL, NULL, 0, 0, NULL};
 static CV_PossibleValue_t resynchattempts_cons_t[] = {{0, "MIN"}, {20, "MAX"}, {0, NULL}};
-consvar_t cv_resynchattempts = {"resynchattempts", "10", 0, resynchattempts_cons_t, NULL, 0, NULL, NULL, 0, 0, NULL	};
+consvar_t cv_resynchattempts = {"resynchattempts", "5", CV_SAVE, resynchattempts_cons_t, NULL, 0, NULL, NULL, 0, 0, NULL	};
 consvar_t cv_blamecfail = {"blamecfail", "Off", 0, CV_OnOff, NULL, 0, NULL, NULL, 0, 0, NULL	};
 
 // max file size to send to a player (in kilobytes)
@@ -2846,11 +3050,12 @@ static CV_PossibleValue_t downloadspeed_cons_t[] = {{0, "MIN"}, {32, "MAX"}, {0,
 consvar_t cv_downloadspeed = {"downloadspeed", "16", CV_SAVE, downloadspeed_cons_t, NULL, 0, NULL, NULL, 0, 0, NULL};
 
 static void Got_AddPlayer(UINT8 **p, INT32 playernum);
+static void Got_RemovePlayer(UINT8 **p, INT32 playernum);
 
 // called one time at init
 void D_ClientServerInit(void)
 {
-	DEBFILE(va("- - -== SRB2 v%d.%.2d.%d "VERSIONSTRING" debugfile ==- - -\n",
+	DEBFILE(va("- - -== SRB2Kart v%d.%.2d.%d "VERSIONSTRING" debugfile ==- - -\n",
 		VERSION/100, VERSION%100, SUBVERSION));
 
 #ifndef NONET
@@ -2873,11 +3078,13 @@ void D_ClientServerInit(void)
 
 	RegisterNetXCmd(XD_KICK, Got_KickCmd);
 	RegisterNetXCmd(XD_ADDPLAYER, Got_AddPlayer);
+	RegisterNetXCmd(XD_REMOVEPLAYER, Got_RemovePlayer);
 #ifndef NONET
 	CV_RegisterVar(&cv_allownewplayer);
+#ifdef VANILLAJOINNEXTROUND
 	CV_RegisterVar(&cv_joinnextround);
+#endif
 	CV_RegisterVar(&cv_showjoinaddress);
-	CV_RegisterVar(&cv_resynchattempts);
 	CV_RegisterVar(&cv_blamecfail);
 #ifdef DUMPCONSISTENCY
 	CV_RegisterVar(&cv_dumpconsistency);
@@ -2900,6 +3107,8 @@ static void ResetNode(INT32 node)
 	nodeingame[node] = false;
 	nodetoplayer[node] = -1;
 	nodetoplayer2[node] = -1;
+	nodetoplayer3[node] = -1;
+	nodetoplayer4[node] = -1;
 	nettics[node] = gametic;
 	supposedtics[node] = gametic;
 	nodewaiting[node] = 0;
@@ -2935,6 +3144,7 @@ void SV_ResetServer(void)
 		playeringame[i] = false;
 		playernode[i] = UINT8_MAX;
 		sprintf(player_names[i], "Player %d", i + 1);
+		adminplayers[i] = -1; // Populate the entire adminplayers array with -1.
 	}
 
 	mynode = 0;
@@ -3011,7 +3221,7 @@ void D_QuitNetGame(void)
 	}
 
 	D_CloseConnection();
-	adminplayer = -1;
+	ClearAdminPlayers();
 
 	DEBFILE("===========================================================================\n"
 	        "                         Log finish\n"
@@ -3040,9 +3250,9 @@ static inline void SV_AddNode(INT32 node)
 static void Got_AddPlayer(UINT8 **p, INT32 playernum)
 {
 	INT16 node, newplayernum;
-	boolean splitscreenplayer;
+	UINT8 splitscreenplayer = 0;
 
-	if (playernum != serverplayer && playernum != adminplayer)
+	if (playernum != serverplayer && !IsPlayerAdmin(playernum))
 	{
 		// protect against hacked/buggy client
 		CONS_Alert(CONS_WARNING, M_GetText("Illegal add player command received from %s\n"), player_names[playernum]);
@@ -3059,59 +3269,65 @@ static void Got_AddPlayer(UINT8 **p, INT32 playernum)
 
 	node = READUINT8(*p);
 	newplayernum = READUINT8(*p);
-	splitscreenplayer = newplayernum & 0x80;
-	newplayernum &= ~0x80;
+	splitscreenplayer = newplayernum/MAXPLAYERS;
+	newplayernum %= MAXPLAYERS;
 
 	// Clear player before joining, lest some things get set incorrectly
-	// HACK: don't do this for splitscreen, it relies on preset values
-	if (!splitscreen && !botingame)
-		CL_ClearPlayer(newplayernum);
+	CL_ClearPlayer(newplayernum);
+
 	playeringame[newplayernum] = true;
 	G_AddPlayer(newplayernum);
 	if (newplayernum+1 > doomcom->numslots)
 		doomcom->numslots = (INT16)(newplayernum+1);
 
-	if (netgame)
-		CONS_Printf(M_GetText("Player %d has joined the game (node %d)\n"), newplayernum+1, node);
-
 	// the server is creating my player
 	if (node == mynode)
 	{
 		playernode[newplayernum] = 0; // for information only
-		if (!splitscreenplayer)
+		if (splitscreenplayer)
+		{
+			if (splitscreenplayer == 1)
+			{
+				secondarydisplayplayer = newplayernum;
+				DEBFILE("spawning my brother\n");
+				if (botingame)
+					players[newplayernum].bot = 1;
+				// Same goes for player 2 when relevant
+			}
+			else if (splitscreenplayer == 2)
+			{
+				thirddisplayplayer = newplayernum;
+				DEBFILE("spawning my sister\n");
+			}
+			else if (splitscreenplayer == 3)
+			{
+				fourthdisplayplayer = newplayernum;
+				DEBFILE("spawning my trusty pet dog\n");
+			}
+		}
+		else
 		{
 			consoleplayer = newplayernum;
 			displayplayer = newplayernum;
 			secondarydisplayplayer = newplayernum;
+			thirddisplayplayer = newplayernum;
+			fourthdisplayplayer = newplayernum;
 			DEBFILE("spawning me\n");
-			// Apply player flags as soon as possible!
-			players[newplayernum].pflags &= ~(PF_FLIPCAM|PF_ANALOGMODE);
-			if (cv_flipcam.value)
-				players[newplayernum].pflags |= PF_FLIPCAM;
-			if (cv_analog.value)
-				players[newplayernum].pflags |= PF_ANALOGMODE;
-		}
-		else
-		{
-			secondarydisplayplayer = newplayernum;
-			DEBFILE("spawning my brother\n");
-			if (botingame)
-				players[newplayernum].bot = 1;
-			// Same goes for player 2 when relevant
-			players[newplayernum].pflags &= ~(PF_FLIPCAM|PF_ANALOGMODE);
-			if (cv_flipcam2.value)
-				players[newplayernum].pflags |= PF_FLIPCAM;
-			if (cv_analog2.value)
-				players[newplayernum].pflags |= PF_ANALOGMODE;
 		}
 		D_SendPlayerConfig();
 		addedtogame = true;
 	}
-	else if (server && netgame && cv_showjoinaddress.value)
+
+	if (netgame)
 	{
-		const char *address;
-		if (I_GetNodeAddress && (address = I_GetNodeAddress(node)) != NULL)
-			CONS_Printf(M_GetText("Player Address is %s\n"), address);
+		if (server && cv_showjoinaddress.value)
+		{
+			const char *address;
+			if (I_GetNodeAddress && (address = I_GetNodeAddress(node)) != NULL)
+				HU_AddChatText(va("\x82*Player %d has joined the game (node %d) (%s)", newplayernum+1, node, address), false);	// merge join notification + IP to avoid clogging console/chat.
+		}
+		else
+			HU_AddChatText(va("\x82*Player %d has joined the game (node %d)", newplayernum+1, node), false);	// if you don't wanna see the join address.
 	}
 
 	if (server && multiplayer && motd[0] != '\0')
@@ -3122,6 +3338,32 @@ static void Got_AddPlayer(UINT8 **p, INT32 playernum)
 #endif
 }
 
+// Xcmd XD_REMOVEPLAYER
+static void Got_RemovePlayer(UINT8 **p, INT32 playernum)
+{
+	SINT8 pnum, reason;
+
+	if (playernum != serverplayer && !IsPlayerAdmin(playernum))
+	{
+		// protect against hacked/buggy client
+		CONS_Alert(CONS_WARNING, M_GetText("Illegal remove player command received from %s\n"), player_names[playernum]);
+		if (server)
+		{
+			XBOXSTATIC UINT8 buf[2];
+
+			buf[0] = (UINT8)playernum;
+			buf[1] = KICK_MSG_CON_FAIL;
+			SendNetXCmd(XD_KICK, &buf, 2);
+		}
+		return;
+	}
+
+	pnum = READUINT8(*p);
+	reason = READUINT8(*p);
+
+	CL_RemovePlayer(pnum, reason);
+}
+
 static boolean SV_AddWaitingPlayers(void)
 {
 	INT32 node, n, newplayer = false;
@@ -3129,78 +3371,28 @@ static boolean SV_AddWaitingPlayers(void)
 	UINT8 newplayernum = 0;
 
 	// What is the reason for this? Why can't newplayernum always be 0?
+	// Sal: Because the dedicated player is stupidly forced into players[0].....
 	if (dedicated)
 		newplayernum = 1;
 
 	for (node = 0; node < MAXNETNODES; node++)
 	{
-		// splitscreen can allow 2 player in one node
+		// splitscreen can allow 2+ players in one node
 		for (; nodewaiting[node] > 0; nodewaiting[node]--)
 		{
 			newplayer = true;
 
-			if (netgame)
-				// !!!!!!!!! EXTREMELY SUPER MEGA GIGA ULTRA ULTIMATELY TERRIBLY IMPORTANT !!!!!!!!!
-				//
-				// The line just after that comment is an awful, horrible, terrible, TERRIBLE hack.
-				//
-				// Basically, the fix I did in order to fix the download freezes happens
-				// to cause situations in which a player number does not match
-				// the node number associated to that player.
-				// That is totally normal, there is absolutely *nothing* wrong with that.
-				// Really. Player 7 being tied to node 29, for instance, is totally fine.
-				//
-				// HOWEVER. A few (broken) parts of the netcode do the TERRIBLE mistake
-				// of mixing up the concepts of node and player, resulting in
-				// incorrect handling of cases where a player is tied to a node that has
-				// a different number (which is a totally normal case, or at least should be).
-				// This incorrect handling can go as far as literally
-				// anyone from joining your server at all, forever.
-				//
-				// Given those two facts, there are two options available
-				// in order to let this download freeze fix be:
-				//  1) Fix the broken parts that assume a node is a player or similar bullshit.
-				//  2) Change the part this comment is located at, so that any player who joins
-				//     is given the same number as their associated node.
-				//
-				// No need to say, 1) is by far the obvious best, whereas 2) is a terrible hack.
-				// Unfortunately, after trying 1), I most likely didn't manage to find all
-				// of those broken parts, and thus 2) has become the only safe option that remains.
-				//
-				// So I did this hack.
-				//
-				// If it isn't clear enough, in order to get rid of this ugly hack,
-				// you will have to fix all parts of the netcode that
-				// make a confusion between nodes and players.
-				//
-				// And if it STILL isn't clear enough, a node and a player
-				// is NOT the same thing. Never. NEVER. *NEVER*.
-				//
-				// And if someday you make the terrible mistake of
-				// daring to have the unforgivable idea to try thinking
-				// that a node might possibly be the same as a player,
-				// or that a player should have the same number as its node,
-				// be sure that I will somehow know about it and
-				// hunt you down tirelessly and make you regret it,
-				// even if you live on the other side of the world.
-				//
-				// TODO:            vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-				// \todo >>>>>>>>>> Remove this horrible hack as soon as possible <<<<<<<<<<
-				// TODO:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-				//
-				// !!!!!!!!! EXTREMELY SUPER MEGA GIGA ULTRA ULTIMATELY TERRIBLY IMPORTANT !!!!!!!!!
-				newplayernum = node; // OMFG SAY WELCOME TO TEH NEW HACK FOR FIX FIL DOWNLOAD!!1!
-			else // Don't use the hack if we don't have to
-				// search for a free playernum
-				// we can't use playeringame since it is not updated here
-				for (; newplayernum < MAXPLAYERS; newplayernum++)
-				{
-					for (n = 0; n < MAXNETNODES; n++)
-						if (nodetoplayer[n] == newplayernum || nodetoplayer2[n] == newplayernum)
-							break;
-					if (n == MAXNETNODES)
+			// search for a free playernum
+			// we can't use playeringame since it is not updated here
+			for (; newplayernum < MAXPLAYERS; newplayernum++)
+			{
+				for (n = 0; n < MAXNETNODES; n++)
+					if (nodetoplayer[n] == newplayernum || nodetoplayer2[n] == newplayernum
+						|| nodetoplayer3[n] == newplayernum || nodetoplayer4[n] == newplayernum)
 						break;
-				}
+				if (n == MAXNETNODES)
+					break;
+			}
 
 			// should never happen since we check the playernum
 			// before accepting the join
@@ -3212,10 +3404,20 @@ static boolean SV_AddWaitingPlayers(void)
 			buf[1] = newplayernum;
 			if (playerpernode[node] < 1)
 				nodetoplayer[node] = newplayernum;
-			else
+			else if (playerpernode[node] < 2)
 			{
 				nodetoplayer2[node] = newplayernum;
-				buf[1] |= 0x80;
+				buf[1] += MAXPLAYERS;
+			}
+			else if (playerpernode[node] < 3)
+			{
+				nodetoplayer3[node] = newplayernum;
+				buf[1] += MAXPLAYERS*2;
+			}
+			else
+			{
+				nodetoplayer4[node] = newplayernum;
+				buf[1] += MAXPLAYERS*3;
 			}
 			playerpernode[node]++;
 
@@ -3236,14 +3438,14 @@ void CL_AddSplitscreenPlayer(void)
 		CL_SendJoin();
 }
 
-void CL_RemoveSplitscreenPlayer(void)
+void CL_RemoveSplitscreenPlayer(UINT8 p)
 {
 	XBOXSTATIC UINT8 buf[2];
 
 	if (cl_mode != CL_CONNECTED)
 		return;
 
-	buf[0] = (UINT8)secondarydisplayplayer;
+	buf[0] = p;
 	buf[1] = KICK_MSG_PLAYER_QUIT;
 	SendNetXCmd(XD_KICK, &buf, 2);
 }
@@ -3290,12 +3492,16 @@ void SV_StopServer(void)
 
 	if (gamestate == GS_INTERMISSION)
 		Y_EndIntermission();
+	if (gamestate == GS_VOTING)
+		Y_EndVote();
 	gamestate = wipegamestate = GS_NULL;
 
 	localtextcmd[0] = 0;
 	localtextcmd2[0] = 0;
+	localtextcmd3[0] = 0;
+	localtextcmd4[0] = 0;
 
-	for (i = 0; i < BACKUPTICS; i++)
+	for (i = firstticstosend; i < firstticstosend + BACKUPTICS; i++)
 		D_Clearticcmd(i);
 
 	consoleplayer = 0;
@@ -3311,7 +3517,7 @@ void SV_StartSinglePlayerServer(void)
 	server = true;
 	netgame = false;
 	multiplayer = false;
-	gametype = GT_COOP;
+	gametype = GT_RACE; //srb2kart
 
 	// no more tic the game with this settings!
 	SV_StopServer();
@@ -3352,16 +3558,23 @@ static size_t TotalTextCmdPerTic(tic_t tic)
   */
 static void HandleConnect(SINT8 node)
 {
+	// Sal: Dedicated mode is INCREDIBLY hacked together.
+	// If a server filled out, then it'd overwrite the host and turn everyone into weird husks.....
+	// It's too much effort to legimately fix right now. Just prevent it from reaching that state.
+	UINT8 maxplayers = min((dedicated ? MAXPLAYERS-1 : MAXPLAYERS), cv_maxplayers.value);
+
 	if (bannednode && bannednode[node])
 		SV_SendRefuse(node, M_GetText("You have been banned\nfrom the server"));
 	else if (netbuffer->u.clientcfg.version != VERSION
 		|| netbuffer->u.clientcfg.subversion != SUBVERSION)
-		SV_SendRefuse(node, va(M_GetText("Different SRB2 versions cannot\nplay a netgame!\n(server version %d.%d.%d)"), VERSION/100, VERSION%100, SUBVERSION));
+		SV_SendRefuse(node, va(M_GetText("Different SRB2Kart versions cannot\nplay a netgame!\n(server version %d.%d.%d)"), VERSION/100, VERSION%100, SUBVERSION));
 	else if (!cv_allownewplayer.value && node)
 		SV_SendRefuse(node, M_GetText("The server is not accepting\njoins for the moment"));
-	else if (D_NumPlayers() >= cv_maxplayers.value)
-		SV_SendRefuse(node, va(M_GetText("Maximum players reached: %d"), cv_maxplayers.value));
-	else if (netgame && netbuffer->u.clientcfg.localplayers > 1) // Hacked client?
+	else if (D_NumPlayers() >= maxplayers)
+		SV_SendRefuse(node, va(M_GetText("Maximum players reached: %d"), maxplayers));
+	else if (netgame && D_NumPlayers() + netbuffer->u.clientcfg.localplayers > maxplayers)
+		SV_SendRefuse(node, va(M_GetText("Number of local players\nwould exceed maximum: %d"), maxplayers));
+	else if (netgame && netbuffer->u.clientcfg.localplayers > 4) // Hacked client?
 		SV_SendRefuse(node, M_GetText("Too many players from\nthis node."));
 	else if (netgame && !netbuffer->u.clientcfg.localplayers) // Stealth join?
 		SV_SendRefuse(node, M_GetText("No players from\nthis node."));
@@ -3391,14 +3604,16 @@ static void HandleConnect(SINT8 node)
 			// you get a free second before desynch checks. use it wisely.
 			SV_InitResynchVars(node);
 
+#ifdef VANILLAJOINNEXTROUND
 			if (cv_joinnextround.value && gameaction == ga_nothing)
 				G_SetGamestate(GS_WAITINGPLAYERS);
+#endif
 			if (!SV_SendServerConfig(node))
 			{
 				G_SetGamestate(backupstate);
 				/// \note Shouldn't SV_SendRefuse be called before ResetNode?
-				ResetNode(node);
 				SV_SendRefuse(node, M_GetText("Server couldn't send info, please try again"));
+				ResetNode(node); // Yeah, lets try it!
 				/// \todo fix this !!!
 				return; // restart the while
 			}
@@ -3410,7 +3625,7 @@ static void HandleConnect(SINT8 node)
 #ifdef JOININGAME
 		if (nodewaiting[node])
 		{
-			if ((gamestate == GS_LEVEL || gamestate == GS_INTERMISSION) && newnode)
+			if (node && newnode)
 			{
 				SV_SendSaveGame(node); // send a complete game state
 				DEBFILE("send savegame\n");
@@ -3470,6 +3685,7 @@ static void HandleServerInfo(SINT8 node)
 	const tic_t ticdiff = (ticnow - ticthen)*1000/NEWTICRATE;
 	netbuffer->u.serverinfo.time = (tic_t)LONG(ticdiff);
 	netbuffer->u.serverinfo.servername[MAXSERVERNAME-1] = 0;
+	netbuffer->u.serverinfo.gametype = (UINT8)((netbuffer->u.serverinfo.gametype == VANILLA_GT_MATCH) ? GT_MATCH : GT_RACE);
 
 	SL_InsertServer(&netbuffer->u.serverinfo, node);
 }
@@ -3581,9 +3797,11 @@ static void HandlePacketFromAwayNode(SINT8 node)
 			if (client)
 			{
 				maketic = gametic = neededtic = (tic_t)LONG(netbuffer->u.servercfg.gametic);
-				gametype = netbuffer->u.servercfg.gametype;
+				if ((gametype = netbuffer->u.servercfg.gametype) >= NUMGAMETYPES)
+					I_Error("Bad gametype in cliserv!");
 				modifiedgame = netbuffer->u.servercfg.modifiedgame;
-				adminplayer = netbuffer->u.servercfg.adminplayer;
+				for (j = 0; j < MAXPLAYERS; j++)
+					adminplayers[j] = netbuffer->u.servercfg.adminplayers[j];
 				memcpy(server_context, netbuffer->u.servercfg.server_context, 8);
 			}
 
@@ -3621,12 +3839,12 @@ static void HandlePacketFromAwayNode(SINT8 node)
 			/// \note Wait. What if a Lua script uses some global custom variables synched with the NetVars hook?
 			///       Shouldn't them be downloaded even at intermission time?
 			///       Also, according to HandleConnect, the server will send the savegame even during intermission...
-			if (netbuffer->u.servercfg.gamestate == GS_LEVEL/* ||
-				netbuffer->u.servercfg.gamestate == GS_INTERMISSION*/)
-				cl_mode = CL_DOWNLOADSAVEGAME;
-			else
+			/// Sryder 2018-07-05: If we don't want to send the player config another way we need to send the gamestate
+			///                    At almost any gamestate there could be joiners... So just always send gamestate?
+			cl_mode = ((server) ? CL_CONNECTED : CL_DOWNLOADSAVEGAME);
+#else
+			cl_mode = CL_CONNECTED;
 #endif
-				cl_mode = CL_CONNECTED;
 			break;
 		}
 
@@ -3675,6 +3893,32 @@ static void HandlePacketFromAwayNode(SINT8 node)
 #undef SERVERONLY
 }
 
+/** Checks ticcmd for "speed hacks"
+  *
+  * \param p Which player
+  * \return True if player is hacking
+  * \sa HandlePacketFromPlayer
+  *
+  */
+static boolean CheckForSpeedHacks(UINT8 p)
+{
+	if (netcmds[maketic%BACKUPTICS][p].forwardmove > MAXPLMOVE || netcmds[maketic%BACKUPTICS][p].forwardmove < -MAXPLMOVE
+		|| netcmds[maketic%BACKUPTICS][p].sidemove > MAXPLMOVE || netcmds[maketic%BACKUPTICS][p].sidemove < -MAXPLMOVE
+		|| netcmds[maketic%BACKUPTICS][p].driftturn > KART_FULLTURN || netcmds[maketic%BACKUPTICS][p].driftturn < -KART_FULLTURN)
+	{
+		XBOXSTATIC char buf[2];
+		CONS_Alert(CONS_WARNING, M_GetText("Illegal movement value received from node %d\n"), playernode[p]);
+		//D_Clearticcmd(k);
+
+		buf[0] = (char)p;
+		buf[1] = KICK_MSG_CON_FAIL;
+		SendNetXCmd(XD_KICK, &buf, 2);
+		return true;
+	}
+
+	return false;
+}
+
 /** Handles a packet received from a node that is in game
   *
   * \param node The packet sender
@@ -3711,8 +3955,12 @@ FILESTAMP
 			break;
 		case PT_CLIENTCMD:
 		case PT_CLIENT2CMD:
+		case PT_CLIENT3CMD:
+		case PT_CLIENT4CMD:
 		case PT_CLIENTMIS:
 		case PT_CLIENT2MIS:
+		case PT_CLIENT3MIS:
+		case PT_CLIENT4MIS:
 		case PT_NODEKEEPALIVE:
 		case PT_NODEKEEPALIVEMIS:
 			if (client)
@@ -3728,6 +3976,7 @@ FILESTAMP
 			realend = ExpandTics(netbuffer->u.clientpak.resendfrom);
 
 			if (netbuffer->packettype == PT_CLIENTMIS || netbuffer->packettype == PT_CLIENT2MIS
+				|| netbuffer->packettype == PT_CLIENT3MIS || netbuffer->packettype == PT_CLIENT4MIS
 				|| netbuffer->packettype == PT_NODEKEEPALIVEMIS
 				|| supposedtics[node] < realend)
 			{
@@ -3743,9 +3992,8 @@ FILESTAMP
 			// Update the nettics
 			nettics[node] = realend;
 
-			// Don't do anything for packets of type NODEKEEPALIVE?
-			if (netconsole == -1 || netbuffer->packettype == PT_NODEKEEPALIVE
-				|| netbuffer->packettype == PT_NODEKEEPALIVEMIS)
+			// This should probably still timeout though, as the node should always have a player 1 number
+			if (netconsole == -1)
 				break;
 
 			// If a client sends a ticcmd it should mean they are done receiving the savegame
@@ -3755,28 +4003,52 @@ FILESTAMP
 			/// \todo Use a separate cvar for that kind of timeout?
 			freezetimeout[node] = I_GetTime() + connectiontimeout;
 
+			// Don't do anything for packets of type NODEKEEPALIVE?
+			// Sryder 2018/07/01: Update the freezetimeout still!
+			if (netbuffer->packettype == PT_NODEKEEPALIVE
+				|| netbuffer->packettype == PT_NODEKEEPALIVEMIS)
+				break;
+
 			// Copy ticcmd
 			G_MoveTiccmd(&netcmds[maketic%BACKUPTICS][netconsole], &netbuffer->u.clientpak.cmd, 1);
 
 			// Check ticcmd for "speed hacks"
-			if (netcmds[maketic%BACKUPTICS][netconsole].forwardmove > MAXPLMOVE || netcmds[maketic%BACKUPTICS][netconsole].forwardmove < -MAXPLMOVE
-				|| netcmds[maketic%BACKUPTICS][netconsole].sidemove > MAXPLMOVE || netcmds[maketic%BACKUPTICS][netconsole].sidemove < -MAXPLMOVE)
-			{
-				XBOXSTATIC char buf[2];
-				CONS_Alert(CONS_WARNING, M_GetText("Illegal movement value received from node %d\n"), netconsole);
-				//D_Clearticcmd(k);
-
-				buf[0] = (char)netconsole;
-				buf[1] = KICK_MSG_CON_FAIL;
-				SendNetXCmd(XD_KICK, &buf, 2);
+			if (CheckForSpeedHacks((UINT8)netconsole))
 				break;
-			}
 
 			// Splitscreen cmd
-			if ((netbuffer->packettype == PT_CLIENT2CMD || netbuffer->packettype == PT_CLIENT2MIS)
-				&& nodetoplayer2[node] >= 0)
+			if (((netbuffer->packettype == PT_CLIENT2CMD || netbuffer->packettype == PT_CLIENT2MIS)
+				|| (netbuffer->packettype == PT_CLIENT3CMD || netbuffer->packettype == PT_CLIENT3MIS)
+				|| (netbuffer->packettype == PT_CLIENT4CMD || netbuffer->packettype == PT_CLIENT4MIS))
+				&& (nodetoplayer2[node] >= 0))
+			{
 				G_MoveTiccmd(&netcmds[maketic%BACKUPTICS][(UINT8)nodetoplayer2[node]],
 					&netbuffer->u.client2pak.cmd2, 1);
+
+				if (CheckForSpeedHacks((UINT8)nodetoplayer2[node]))
+					break;
+			}
+
+			if (((netbuffer->packettype == PT_CLIENT3CMD || netbuffer->packettype == PT_CLIENT3MIS)
+				|| (netbuffer->packettype == PT_CLIENT4CMD || netbuffer->packettype == PT_CLIENT4MIS))
+				&& (nodetoplayer3[node] >= 0))
+			{
+				G_MoveTiccmd(&netcmds[maketic%BACKUPTICS][(UINT8)nodetoplayer3[node]],
+					&netbuffer->u.client3pak.cmd3, 1);
+
+				if (CheckForSpeedHacks((UINT8)nodetoplayer3[node]))
+					break;
+			}
+
+			if ((netbuffer->packettype == PT_CLIENT4CMD || netbuffer->packettype == PT_CLIENT4MIS)
+				&& (nodetoplayer4[node] >= 0))
+			{
+				G_MoveTiccmd(&netcmds[maketic%BACKUPTICS][(UINT8)nodetoplayer4[node]],
+					&netbuffer->u.client4pak.cmd4, 1);
+
+				if (CheckForSpeedHacks((UINT8)nodetoplayer4[node]))
+					break;
+			}
 
 			// A delay before we check resynching
 			// Used on join or just after a synch fail
@@ -3819,10 +4091,32 @@ FILESTAMP
 			else if (resynch_score[node])
 				--resynch_score[node];
 			break;
-		case PT_TEXTCMD2: // splitscreen special
-			netconsole = nodetoplayer2[node];
-			/* FALLTHRU */
+		case PT_BASICKEEPALIVE:
+			if (client)
+				break;
+
+			// This should probably still timeout though, as the node should always have a player 1 number
+			if (netconsole == -1)
+				break;
+
+			// If a client sends this it should mean they are done receiving the savegame
+			sendingsavegame[node] = false;
+
+			// As long as clients send keep alives, the server can keep running, so reset the timeout
+			/// \todo Use a separate cvar for that kind of timeout?
+			freezetimeout[node] = I_GetTime() + connectiontimeout;
+			break;
 		case PT_TEXTCMD:
+		case PT_TEXTCMD2:
+		case PT_TEXTCMD3:
+		case PT_TEXTCMD4:
+			if (netbuffer->packettype == PT_TEXTCMD2) // splitscreen special
+				netconsole = nodetoplayer2[node];
+			else if (netbuffer->packettype == PT_TEXTCMD3)
+				netconsole = nodetoplayer3[node];
+			else if (netbuffer->packettype == PT_TEXTCMD4)
+				netconsole = nodetoplayer4[node];
+
 			if (client)
 				break;
 
@@ -3903,14 +4197,31 @@ FILESTAMP
 				else
 					buf[1] = KICK_MSG_PLAYER_QUIT;
 				SendNetXCmd(XD_KICK, &buf, 2);
-				nodetoplayer[node] = -1;
-				if (nodetoplayer2[node] != -1 && nodetoplayer2[node] >= 0
+				//nodetoplayer[node] = -1;
+
+				/*if (nodetoplayer2[node] != -1 && nodetoplayer2[node] >= 0
 					&& playeringame[(UINT8)nodetoplayer2[node]])
 				{
 					buf[0] = nodetoplayer2[node];
 					SendNetXCmd(XD_KICK, &buf, 2);
 					nodetoplayer2[node] = -1;
 				}
+
+				if (nodetoplayer3[node] != -1 && nodetoplayer3[node] >= 0
+					&& playeringame[(UINT8)nodetoplayer3[node]])
+				{
+					buf[0] = nodetoplayer3[node];
+					SendNetXCmd(XD_KICK, &buf, 2);
+					nodetoplayer3[node] = -1;
+				}
+
+				if (nodetoplayer4[node] != -1 && nodetoplayer4[node] >= 0
+					&& playeringame[(UINT8)nodetoplayer4[node]])
+				{
+					buf[0] = nodetoplayer4[node];
+					SendNetXCmd(XD_KICK, &buf, 2);
+					nodetoplayer4[node] = -1;
+				}*/
 			}
 			Net_CloseConnection(node);
 			nodeingame[node] = false;
@@ -4004,7 +4315,8 @@ FILESTAMP
 						INT32 k = *txtpak++; // playernum
 						const size_t txtsize = txtpak[0]+1;
 
-						M_Memcpy(D_GetTextcmd(i, k), txtpak, txtsize);
+						if (i >= gametic) // Don't copy old net commands
+							M_Memcpy(D_GetTextcmd(i, k), txtpak, txtsize);
 						txtpak += txtsize;
 					}
 				}
@@ -4180,18 +4492,18 @@ static INT16 Consistancy(void)
 	{
 		if (!playeringame[i])
 			ret ^= 0xCCCC;
-		else if (!players[i].mo);
+		else if (!players[i].mo || gamestate != GS_LEVEL);
 		else
 		{
 			ret += players[i].mo->x;
 			ret -= players[i].mo->y;
-			ret += players[i].powers[pw_shield];
+			ret += players[i].kartstuff[k_itemtype]; // powers[pw_shield]
 			ret *= i+1;
 		}
 	}
 	// I give up
 	// Coop desynching enemies is painful
-	if (!G_PlatformGametype())
+	if (gamestate == GS_LEVEL)
 		ret += P_GetRandSeed();
 
 #ifdef MOBJCONSISTANCY
@@ -4200,70 +4512,114 @@ static INT16 Consistancy(void)
 		DEBFILE(va("Consistancy = %u\n", ret));
 		return ret;
 	}
-	for (th = thinkercap.next; th != &thinkercap; th = th->next)
+	if (gamestate == GS_LEVEL)
 	{
-		if (th->function.acp1 != (actionf_p1)P_MobjThinker)
-			continue;
-
-		mo = (mobj_t *)th;
-
-		if (mo->flags & (MF_SPECIAL | MF_SOLID | MF_PUSHABLE | MF_BOSS | MF_MISSILE | MF_SPRING | MF_MONITOR | MF_FIRE | MF_ENEMY | MF_PAIN | MF_STICKY))
+		for (th = thinkercap.next; th != &thinkercap; th = th->next)
 		{
-			ret -= mo->type;
-			ret += mo->x;
-			ret -= mo->y;
-			ret += mo->z;
-			ret -= mo->momx;
-			ret += mo->momy;
-			ret -= mo->momz;
-			ret += mo->angle;
-			ret -= mo->flags;
-			ret += mo->flags2;
-			ret -= mo->eflags;
-			if (mo->target)
+			if (th->function.acp1 != (actionf_p1)P_MobjThinker)
+				continue;
+
+			mo = (mobj_t *)th;
+
+			if (mo->flags & (MF_SPECIAL | MF_SOLID | MF_PUSHABLE | MF_BOSS | MF_MISSILE | MF_SPRING | MF_MONITOR | MF_FIRE | MF_ENEMY | MF_PAIN | MF_STICKY))
 			{
-				ret += mo->target->type;
-				ret -= mo->target->x;
-				ret += mo->target->y;
-				ret -= mo->target->z;
-				ret += mo->target->momx;
-				ret -= mo->target->momy;
-				ret += mo->target->momz;
-				ret -= mo->target->angle;
-				ret += mo->target->flags;
-				ret -= mo->target->flags2;
-				ret += mo->target->eflags;
-				ret -= mo->target->state - states;
-				ret += mo->target->tics;
-				ret -= mo->target->sprite;
-				ret += mo->target->frame;
+				ret -= mo->type;
+				ret += mo->x;
+				ret -= mo->y;
+				ret += mo->z;
+				ret -= mo->momx;
+				ret += mo->momy;
+				ret -= mo->momz;
+				ret += mo->angle;
+				ret -= mo->flags;
+				ret += mo->flags2;
+				ret -= mo->eflags;
+				if (mo->target)
+				{
+					ret += mo->target->type;
+					ret -= mo->target->x;
+					ret += mo->target->y;
+					ret -= mo->target->z;
+					ret += mo->target->momx;
+					ret -= mo->target->momy;
+					ret += mo->target->momz;
+					ret -= mo->target->angle;
+					ret += mo->target->flags;
+					ret -= mo->target->flags2;
+					ret += mo->target->eflags;
+					ret -= mo->target->state - states;
+					ret += mo->target->tics;
+					ret -= mo->target->sprite;
+					ret += mo->target->frame;
+				}
+				else
+					ret ^= 0x3333;
+				if (mo->tracer && mo->tracer->type != MT_OVERLAY)
+				{
+					ret += mo->tracer->type;
+					ret -= mo->tracer->x;
+					ret += mo->tracer->y;
+					ret -= mo->tracer->z;
+					ret += mo->tracer->momx;
+					ret -= mo->tracer->momy;
+					ret += mo->tracer->momz;
+					ret -= mo->tracer->angle;
+					ret += mo->tracer->flags;
+					ret -= mo->tracer->flags2;
+					ret += mo->tracer->eflags;
+					ret -= mo->tracer->state - states;
+					ret += mo->tracer->tics;
+					ret -= mo->tracer->sprite;
+					ret += mo->tracer->frame;
+				}
+				else
+					ret ^= 0xAAAA;
+				// SRB2Kart: We use hnext & hprev very extensively
+				if (mo->hnext)
+				{
+					ret += mo->hnext->type;
+					ret -= mo->hnext->x;
+					ret += mo->hnext->y;
+					ret -= mo->hnext->z;
+					ret += mo->hnext->momx;
+					ret -= mo->hnext->momy;
+					ret += mo->hnext->momz;
+					ret -= mo->hnext->angle;
+					ret += mo->hnext->flags;
+					ret -= mo->hnext->flags2;
+					ret += mo->hnext->eflags;
+					ret -= mo->hnext->state - states;
+					ret += mo->hnext->tics;
+					ret -= mo->hnext->sprite;
+					ret += mo->hnext->frame;
+				}
+				else
+					ret ^= 0x5555;
+				if (mo->hprev)
+				{
+					ret += mo->hprev->type;
+					ret -= mo->hprev->x;
+					ret += mo->hprev->y;
+					ret -= mo->hprev->z;
+					ret += mo->hprev->momx;
+					ret -= mo->hprev->momy;
+					ret += mo->hprev->momz;
+					ret -= mo->hprev->angle;
+					ret += mo->hprev->flags;
+					ret -= mo->hprev->flags2;
+					ret += mo->hprev->eflags;
+					ret -= mo->hprev->state - states;
+					ret += mo->hprev->tics;
+					ret -= mo->hprev->sprite;
+					ret += mo->hprev->frame;
+				}
+				else
+					ret ^= 0xCCCC;
+				ret -= mo->state - states;
+				ret += mo->tics;
+				ret -= mo->sprite;
+				ret += mo->frame;
 			}
-			else
-				ret ^= 0x3333;
-			if (mo->tracer && mo->tracer->type != MT_OVERLAY)
-			{
-				ret += mo->tracer->type;
-				ret -= mo->tracer->x;
-				ret += mo->tracer->y;
-				ret -= mo->tracer->z;
-				ret += mo->tracer->momx;
-				ret -= mo->tracer->momy;
-				ret += mo->tracer->momz;
-				ret -= mo->tracer->angle;
-				ret += mo->tracer->flags;
-				ret -= mo->tracer->flags2;
-				ret += mo->tracer->eflags;
-				ret -= mo->tracer->state - states;
-				ret += mo->tracer->tics;
-				ret -= mo->tracer->sprite;
-				ret += mo->tracer->frame;
-			}
-			else
-				ret ^= 0xAAAA;
-			ret -= mo->state - states;
-			ret += mo->tics;
-			ret -= mo->sprite;
-			ret += mo->frame;
 		}
 	}
 #endif
@@ -4273,39 +4629,65 @@ static INT16 Consistancy(void)
 	return (INT16)(ret & 0xFFFF);
 }
 
+// confusing, but this DOESN'T send PT_NODEKEEPALIVE, it sends PT_BASICKEEPALIVE
+// used during wipes to tell the server that a node is still connected
+static void CL_SendClientKeepAlive(void)
+{
+	netbuffer->packettype = PT_BASICKEEPALIVE;
+
+	HSendPacket(servernode, false, 0, 0);
+}
+
 // send the client packet to the server
 static void CL_SendClientCmd(void)
 {
 	size_t packetsize = 0;
+	boolean mis = false;
 
 	netbuffer->packettype = PT_CLIENTCMD;
 
 	if (cl_packetmissed)
-		netbuffer->packettype++;
+	{
+		netbuffer->packettype = PT_CLIENTMIS;
+		mis = true;
+	}
+
 	netbuffer->u.clientpak.resendfrom = (UINT8)(neededtic & UINT8_MAX);
 	netbuffer->u.clientpak.client_tic = (UINT8)(gametic & UINT8_MAX);
 
 	if (gamestate == GS_WAITINGPLAYERS)
 	{
 		// Send PT_NODEKEEPALIVE packet
-		netbuffer->packettype += 4;
+		netbuffer->packettype = (mis ? PT_NODEKEEPALIVEMIS : PT_NODEKEEPALIVE);
 		packetsize = sizeof (clientcmd_pak) - sizeof (ticcmd_t) - sizeof (INT16);
 		HSendPacket(servernode, false, 0, packetsize);
 	}
 	else if (gamestate != GS_NULL)
 	{
+		packetsize = sizeof (clientcmd_pak);
 		G_MoveTiccmd(&netbuffer->u.clientpak.cmd, &localcmds, 1);
 		netbuffer->u.clientpak.consistancy = SHORT(consistancy[gametic%BACKUPTICS]);
 
-		// Send a special packet with 2 cmd for splitscreen
-		if (splitscreen || botingame)
+		if (splitscreen || botingame) // Send a special packet with 2 cmd for splitscreen
 		{
-			netbuffer->packettype += 2;
-			G_MoveTiccmd(&netbuffer->u.client2pak.cmd2, &localcmds2, 1);
+			netbuffer->packettype = (mis ? PT_CLIENT2MIS : PT_CLIENT2CMD);
 			packetsize = sizeof (client2cmd_pak);
+			G_MoveTiccmd(&netbuffer->u.client2pak.cmd2, &localcmds2, 1);
+
+			if (splitscreen > 1)
+			{
+				netbuffer->packettype = (mis ? PT_CLIENT3MIS : PT_CLIENT3CMD);
+				packetsize = sizeof (client3cmd_pak);
+				G_MoveTiccmd(&netbuffer->u.client3pak.cmd3, &localcmds3, 1);
+
+				if (splitscreen > 2)
+				{
+					netbuffer->packettype = (mis ? PT_CLIENT4MIS : PT_CLIENT4CMD);
+					packetsize = sizeof (client4cmd_pak);
+					G_MoveTiccmd(&netbuffer->u.client4pak.cmd4, &localcmds4, 1);
+				}
+			}
 		}
-		else
-			packetsize = sizeof (clientcmd_pak);
 
 		HSendPacket(servernode, false, 0, packetsize);
 	}
@@ -4322,7 +4704,7 @@ static void CL_SendClientCmd(void)
 				localtextcmd[0] = 0;
 		}
 
-		// Send extra data if needed for player 2 (splitscreen)
+		// Send extra data if needed for player 2 (splitscreen == 1)
 		if (localtextcmd2[0])
 		{
 			netbuffer->packettype = PT_TEXTCMD2;
@@ -4330,6 +4712,26 @@ static void CL_SendClientCmd(void)
 			// All extra data have been sent
 			if (HSendPacket(servernode, true, 0, localtextcmd2[0]+1)) // Send can fail...
 				localtextcmd2[0] = 0;
+		}
+
+		// Send extra data if needed for player 3 (splitscreen == 2)
+		if (localtextcmd3[0])
+		{
+			netbuffer->packettype = PT_TEXTCMD3;
+			M_Memcpy(netbuffer->u.textcmd, localtextcmd3, localtextcmd3[0]+1);
+			// All extra data have been sent
+			if (HSendPacket(servernode, true, 0, localtextcmd3[0]+1)) // Send can fail...
+				localtextcmd3[0] = 0;
+		}
+
+		// Send extra data if needed for player 4 (splitscreen == 3)
+		if (localtextcmd4[0])
+		{
+			netbuffer->packettype = PT_TEXTCMD4;
+			M_Memcpy(netbuffer->u.textcmd, localtextcmd4, localtextcmd4[0]+1);
+			// All extra data have been sent
+			if (HSendPacket(servernode, true, 0, localtextcmd4[0]+1)) // Send can fail...
+				localtextcmd4[0] = 0;
 		}
 	}
 }
@@ -4461,9 +4863,17 @@ static void Local_Maketic(INT32 realtics)
 	                   // and G_MapEventsToControls
 	if (!dedicated) rendergametic = gametic;
 	// translate inputs (keyboard/mouse/joystick) into game controls
-	G_BuildTiccmd(&localcmds, realtics);
+	G_BuildTiccmd(&localcmds, realtics, 1);
 	if (splitscreen || botingame)
-		G_BuildTiccmd2(&localcmds2, realtics);
+	{
+		G_BuildTiccmd(&localcmds2, realtics, 2);
+		if (splitscreen > 1)
+		{
+			G_BuildTiccmd(&localcmds3, realtics, 3);
+			if (splitscreen > 2)
+				G_BuildTiccmd(&localcmds4, realtics, 4);
+		}
+	}
 
 	localcmds.angleturn |= TICCMD_RECEIVED;
 }
@@ -4471,6 +4881,7 @@ static void Local_Maketic(INT32 realtics)
 void SV_SpawnPlayer(INT32 playernum, INT32 x, INT32 y, angle_t angle)
 {
 	tic_t tic;
+	UINT8 numadjust = 0;
 
 	(void)x;
 	(void)y;
@@ -4480,7 +4891,21 @@ void SV_SpawnPlayer(INT32 playernum, INT32 x, INT32 y, angle_t angle)
 	// spawning, but will be applied afterwards.
 
 	for (tic = server ? maketic : (neededtic - 1); tic >= gametic; tic--)
+	{
+		if (numadjust++ == BACKUPTICS)
+		{
+			DEBFILE(va("SV_SpawnPlayer: All netcmds for player %d adjusted!\n", playernum));
+			// We already adjusted them all, waste of time doing the same thing over and over
+			// This shouldn't happen normally though, either gametic was 0 (which is handled now anyway)
+			// or maketic >= gametic + BACKUPTICS
+			// -- Monster Iestyn 16/01/18
+			break;
+		}
 		netcmds[tic%BACKUPTICS][playernum].angleturn = (INT16)((angle>>16) | TICCMD_RECEIVED);
+
+		if (!tic) // failsafe for gametic == 0 -- Monster Iestyn 16/01/18
+			break;
+	}
 }
 
 // create missed tic
@@ -4501,8 +4926,12 @@ static void SV_Maketic(void)
 				CONS_Debug(DBG_NETPLAY, "Client Misstic %d\n", maketic);
 #endif
 				// copy the old tic
-				for (i = 0; i < playerpernode[j]; i++, player = nodetoplayer2[j])
+				for (i = 0; i < playerpernode[j]; i++)
 				{
+					if (i == 0) player = nodetoplayer[j];
+					else if (i == 1) player = nodetoplayer2[j];
+					else if (i == 2) player = nodetoplayer3[j];
+					else if (i == 3) player = nodetoplayer4[j];
 					netcmds[maketic%BACKUPTICS][player] = netcmds[(maketic-1)%BACKUPTICS][player];
 					netcmds[maketic%BACKUPTICS][player].angleturn &= ~TICCMD_RECEIVED;
 				}
@@ -4531,7 +4960,7 @@ void TryRunTics(tic_t realtics)
 	{
 		COM_BufExecute();
 		if (mapchangepending)
-			D_MapChange(-1, 0, ultimatemode, false, 2, false, fromlevelselect); // finish the map change
+			D_MapChange(-1, 0, encoremode, false, 2, false, fromlevelselect); // finish the map change
 	}
 
 	NetUpdate();
@@ -4558,8 +4987,16 @@ void TryRunTics(tic_t realtics)
 	}
 #endif
 
+	if (neededtic > gametic)
+	{
+		hu_stopped = false;
+	}
+
 	if (player_joining)
+	{
+		hu_stopped = true;
 		return;
+	}
 
 	if (neededtic > gametic)
 	{
@@ -4575,7 +5012,15 @@ void TryRunTics(tic_t realtics)
 				ExtraDataTicker();
 				gametic++;
 				consistancy[gametic%BACKUPTICS] = Consistancy();
+
+				// Leave a certain amount of tics present in the net buffer as long as we've ran at least one tic this frame.
+				if (client && gamestate == GS_LEVEL && leveltime > 3 && neededtic <= gametic + cv_netticbuffer.value)
+					break;
 			}
+	}
+	else
+	{
+		hu_stopped = true;
 	}
 }
 
@@ -4639,9 +5084,77 @@ static inline void PingUpdate(void)
 }
 #endif
 
+static tic_t gametime = 0;
+
+#ifdef NEWPING
+static void UpdatePingTable(void)
+{
+	INT32 i;
+	if (server)
+	{
+		if (netgame && !(gametime % 255))
+			PingUpdate();
+		// update node latency values so we can take an average later.
+		for (i = 0; i < MAXPLAYERS; i++)
+			if (playeringame[i])
+				realpingtable[i] += G_TicsToMilliseconds(GetLag(playernode[i]));
+		pingmeasurecount++;
+	}
+}
+#endif
+
+// Handle timeouts to prevent definitive freezes from happenning
+static void HandleNodeTimeouts(void)
+{
+	INT32 i;
+	if (server)
+		for (i = 1; i < MAXNETNODES; i++)
+			if (nodeingame[i] && freezetimeout[i] < I_GetTime())
+				Net_ConnectionTimeout(i);
+}
+
+// Keep the network alive while not advancing tics!
+void NetKeepAlive(void)
+{
+	tic_t nowtime;
+	INT32 realtics;
+
+	nowtime = I_GetTime();
+	realtics = nowtime - gametime;
+
+	// return if there's no time passed since the last call
+	if (realtics <= 0) // nothing new to update
+		return;
+
+#ifdef NEWPING
+	UpdatePingTable();
+#endif
+
+	if (server)
+		CL_SendClientKeepAlive();
+
+// Sryder: What is FILESTAMP???
+FILESTAMP
+	GetPackets();
+FILESTAMP
+
+	MasterClient_Ticker();
+
+	if (client)
+	{
+		// send keep alive
+		CL_SendClientKeepAlive();
+		// No need to check for resynch because we aren't running any tics
+	}
+	// No else because no tics are being run and we can't resynch during this
+
+	Net_AckTicker();
+	HandleNodeTimeouts();
+	SV_FileSendTicker();
+}
+
 void NetUpdate(void)
 {
-	static tic_t gametime = 0;
 	static tic_t resptime = 0;
 	tic_t nowtime;
 	INT32 i;
@@ -4663,16 +5176,7 @@ void NetUpdate(void)
 	gametime = nowtime;
 
 #ifdef NEWPING
-	if (server)
-	{
-		if (netgame && !(gametime % 255))
-			PingUpdate();
-		// update node latency values so we can take an average later.
-		for (i = 0; i < MAXPLAYERS; i++)
-			if (playeringame[i])
-				realpingtable[i] += G_TicsToMilliseconds(GetLag(playernode[i]));
-		pingmeasurecount++;
-	}
+	UpdatePingTable();
 #endif
 
 	if (client)
@@ -4740,12 +5244,7 @@ FILESTAMP
 		}
 	}
 	Net_AckTicker();
-	// Handle timeouts to prevent definitive freezes from happenning
-	if (server)
-		for (i = 1; i < MAXNETNODES; i++)
-			if (nodeingame[i] && freezetimeout[i] < I_GetTime())
-				Net_ConnectionTimeout(i);
-	nowtime /= NEWTICRATERATIO;
+	HandleNodeTimeouts();
 	if (nowtime > resptime)
 	{
 		resptime = nowtime;

@@ -216,6 +216,9 @@
     <ClInclude Include="..\hardware\hws_data.h">
       <Filter>Hw_Hardware</Filter>
     </ClInclude>
+    <ClInclude Include="..\hardware\hw_clip.h">
+      <Filter>Hw_Hardware</Filter>
+    </ClInclude>
     <ClInclude Include="..\hardware\hw_data.h">
       <Filter>Hw_Hardware</Filter>
     </ClInclude>
@@ -290,6 +293,9 @@
     </ClInclude>
     <ClInclude Include="..\lua_script.h">
       <Filter>LUA</Filter>
+    </ClInclude>
+    <ClInclude Include="..\apng.h">
+      <Filter>M_Misc</Filter>
     </ClInclude>
     <ClInclude Include="..\md5.h">
       <Filter>M_Misc</Filter>
@@ -443,6 +449,9 @@
     </ClInclude>
     <ClInclude Include="sdlmain.h">
       <Filter>SDLApp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\k_kart.h">
+      <Filter>D_Doom</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -603,6 +612,9 @@
     <ClCompile Include="..\hardware\hw_cache.c">
       <Filter>Hw_Hardware</Filter>
     </ClCompile>
+    <ClCompile Include="..\hardware\hw_clip.c">
+      <Filter>Hw_Hardware</Filter>
+    </ClCompile>
     <ClCompile Include="..\hardware\hw_draw.c">
       <Filter>Hw_Hardware</Filter>
     </ClCompile>
@@ -631,6 +643,9 @@
       <Filter>I_Interface</Filter>
     </ClCompile>
     <ClCompile Include="..\lua_baselib.c">
+      <Filter>LUA</Filter>
+    </ClCompile>
+    <ClCompile Include="..\lua_blockmaplib.c">
       <Filter>LUA</Filter>
     </ClCompile>
     <ClCompile Include="..\lua_consolelib.c">
@@ -875,6 +890,9 @@
     </ClCompile>
     <ClCompile Include="SDL_main\SDL_windows_main.c">
       <Filter>SDLApp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\k_kart.c">
+      <Filter>D_Doom</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
