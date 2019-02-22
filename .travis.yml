@@ -7,6 +7,10 @@ language: c
 sudo: required
 dist: trusty
 
+env:
+  global:
+    - DPL_ENABLED=0
+
 matrix:
     include:
 ################################

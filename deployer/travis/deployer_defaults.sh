@@ -51,7 +51,7 @@
 
 # Package Parameters
 : ${PACKAGE_NAME:=srb2kart}
-: ${PACKAGE_VERSION:=1.0.2}
+: ${PACKAGE_VERSION:=1.0.3}
 : ${PACKAGE_SUBVERSION}         # Highly recommended to set this to reflect the distro series target (e.g., ~18.04bionic)
 : ${PACKAGE_REVISION}           # Defaults to UTC timestamp
 : ${PACKAGE_INSTALL_PATH:=/usr/games/SRB2Kart}
@@ -67,7 +67,7 @@
 
 : ${PROGRAM_NAME:=Sonic Robo Blast 2 Kart}
 : ${PROGRAM_VENDOR:=Kart Krew}
-: ${PROGRAM_VERSION:=1.0.2}
+: ${PROGRAM_VERSION:=1.0.3}
 : ${PROGRAM_DESCRIPTION:=A kart racing mod based on the 3D Sonic the Hedgehog fangame Sonic Robo Blast 2.}
 : ${PROGRAM_FILENAME:=srb2kart}
 
