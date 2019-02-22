@@ -10,6 +10,8 @@ dist: trusty
 env:
   global:
     - DPL_ENABLED=0
+    - DPL_TERMINATE_ASSETS=1
+
 
 matrix:
     include:
