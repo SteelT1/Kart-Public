@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0)
 # DO NOT CHANGE THIS SRB2 STRING! Some variable names depend on this string.
 # Version change is fine.
 project(SRB2
-	VERSION 1.0.2
+	VERSION 1.0.3
 	LANGUAGES C)
 
 if(${PROJECT_SOURCE_DIR} MATCHES ${PROJECT_BINARY_DIR})
@@ -121,6 +121,7 @@ endif()
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Sonic Robo Blast 2 Kart" CACHE STRING "Program name for display purposes")
 set(CPACK_PACKAGE_VENDOR "Kart Krew" CACHE STRING "Vendor name for display purposes")
 #set(CPACK_PACKAGE_DESCRIPTION_FILE )
+set(CPACK_PROJECT_NAME "SRB2Kart") ## Used for file name
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 set(CPACK_PACKAGE_VERSION_MAJOR ${SRB2_VERSION_MAJOR})
 set(CPACK_PACKAGE_VERSION_MINOR ${SRB2_VERSION_MINOR})
