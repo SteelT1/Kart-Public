@@ -553,6 +553,7 @@ cache:
   ccache: true
   directories:
   - $HOME/srb2_cache
+  - /usr/local/Cellar/package
 
 
 addons:
@@ -592,22 +593,23 @@ before_install:
 install:
   # Install OS X library dependencies via Homebrew
   # Do this differently for release buildbots:
-  #     * `brew install --build-bottle` builds libraries for x86_64's lowest common denominator CPU, core2
+  #     * `brew upgrade --build-bottle` builds libraries for x86_64's lowest common denominator CPU, core2
   #     * `sdl2_mixer` requires options from the formula tap https://github.com/mazmazz/homebrew-srb2
   #     * `brew postinstall` runs post-install scripts after building a bottle
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
       brew update;
       brew tap mazmazz/srb2;
+      brew outdated;
     fi;
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
       if [[ "$__DPL_ACTIVE" != "1" ]]; then
-        brew install sdl2 sdl2_mixer game-music-emu p7zip;
-        brew install cmake||true;
+        brew upgrade sdl2 sdl2_mixer game-music-emu p7zip;
+        brew upgrade cmake||true;
       else
-        brew install --build-bottle sdl2 game-music-emu p7zip;
-        brew install --build-bottle mazmazz/srb2/sdl2_mixer --with-flac --with-mpg123;
+        brew upgrade --build-bottle sdl2 game-music-emu p7zip;
+        brew upgrade --build-bottle mazmazz/srb2/sdl2_mixer --with-flac --with-mpg123;
         brew postinstall sdl2 game-music-emu p7zip mazmazz/srb2/sdl2_mixer;
-        brew install cmake||true;
+        brew upgrade cmake||true;
       fi;
     fi
   - mkdir -p $HOME/srb2_cache
