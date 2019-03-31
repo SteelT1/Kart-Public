@@ -316,6 +316,10 @@ menu_t OP_OpenGLOptionsDef, OP_OpenGLFogDef, OP_OpenGLColorDef;
 menu_t OP_SoundOptionsDef;
 //static void M_RestartAudio(void);
 
+#if defined(HAVE_SDL)
+menu_t OP_AdvVideoOptionsDef;
+#endif
+
 //Misc
 menu_t /*OP_DataOptionsDef,*/ OP_ScreenshotOptionsDef, OP_EraseDataDef;
 menu_t OP_HUDOptionsDef, OP_ChatOptionsDef;
@@ -1220,6 +1224,17 @@ static menuitem_t OP_VideoOptionsMenu[] =
 	{IT_STRING | IT_CVAR,	NULL,	"3D models",            &cv_grmd2,              105},
 	{IT_SUBMENU|IT_STRING,	NULL,	"OpenGL Options...",	&OP_OpenGLOptionsDef,   115},
 #endif
+
+#if defined(HAVE_SDL)
+	{IT_SUBMENU|IT_STRING,	NULL,	"Advanced Video Options...",	&OP_AdvVideoOptionsDef, 125},
+#endif	
+};
+
+static menuitem_t OP_AdvVideoOptionsMenu[] =
+{
+#if defined(HAVE_SDL)
+	{IT_STRING|IT_CVAR,		NULL,	"Scale Quality(SW)",		&cv_scalequality,		20},
+#endif	
 };
 
 enum
@@ -2033,6 +2048,10 @@ menu_t OP_OpenGLColorDef =
 menu_t OP_ScreenshotOptionsDef = DEFAULTMENUSTYLE("M_SCSHOT", OP_ScreenshotOptionsMenu, &OP_MainDef, 30, 30);
 menu_t OP_AddonsOptionsDef = DEFAULTMENUSTYLE("M_ADDONS", OP_AddonsOptionsMenu, &OP_MainDef, 30, 30);
 menu_t OP_EraseDataDef = DEFAULTMENUSTYLE("M_DATA", OP_EraseDataMenu, &OP_MainDef, 30, 30);
+
+#if defined(HAVE_SDL)
+menu_t OP_AdvVideoOptionsDef = DEFAULTMENUSTYLE("M_VIDEO", OP_AdvVideoOptionsMenu, &OP_VideoOptionsDef, 40, 40);
+#endif
 
 // ==========================================================================
 // CVAR ONCHANGE EVENTS GO HERE

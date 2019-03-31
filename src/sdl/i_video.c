@@ -81,6 +81,8 @@
 #include "ogl_sdl.h"
 #endif
 
+static void ScaleQuality_OnChange(void);
+
 // maximum number of windowed modes (see windowedModes[][])
 #define MAXWINMODES (18)
 
@@ -99,6 +101,9 @@ boolean highcolor = false;
 // synchronize page flipping with screen refresh
 consvar_t cv_vidwait = {"vid_wait", "Off", CV_SAVE, CV_OnOff, NULL, 0, NULL, NULL, 0, 0, NULL};
 static consvar_t cv_stretch = {"stretch", "Off", CV_SAVE|CV_NOSHOWHELP, CV_OnOff, NULL, 0, NULL, NULL, 0, 0, NULL};
+
+static CV_PossibleValue_t scalequality_cons_t[] = {{0, "Nearest"}, {1, "Linear"}, {2, "Best"}, {0, NULL}};
+consvar_t cv_scalequality = {"vid_scalequality", "0", CV_SAVE|CV_CALL|CV_NOINIT, scalequality_cons_t, ScaleQuality_OnChange, 0, NULL, NULL, 0, 0, NULL};
 
 UINT8 graphics_started = 0; // Is used in console.c and screen.c
 
@@ -142,6 +147,12 @@ SDL_Renderer *renderer;
 static SDL_Texture  *texture;
 static SDL_bool      havefocus = SDL_TRUE;
 static const char *fallback_resolution_name = "Fallback";
+
+static void ScaleQuality_OnChange()
+{
+	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, cv_scalequality.string);
+	COM_ImmedExecute(va("vid_mode %d", vid.modenum)); // Hack to make it apply without restarting
+}
 
 // windowed video modes from which to choose from.
 static INT32 windowedModes[MAXWINMODES][2] =
@@ -1794,6 +1805,7 @@ void I_StartupGraphics(void)
 	COM_AddCommand ("vid_mode", VID_Command_Mode_f);
 	CV_RegisterVar (&cv_vidwait);
 	CV_RegisterVar (&cv_stretch);
+	CV_RegisterVar(&cv_scalequality);
 	disable_mouse = M_CheckParm("-nomouse");
 	disable_fullscreen = M_CheckParm("-win") ? 1 : 0;
 
