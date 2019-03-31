@@ -148,7 +148,7 @@ static SDL_Texture  *texture;
 static SDL_bool      havefocus = SDL_TRUE;
 static const char *fallback_resolution_name = "Fallback";
 
-static void ScaleQuality_OnChange()
+static void ScaleQuality_OnChange(void)
 {
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, cv_scalequality.string);
 	COM_ImmedExecute(va("vid_mode %d", vid.modenum)); // Hack to make it apply without restarting
