@@ -103,7 +103,7 @@ consvar_t cv_vidwait = {"vid_wait", "Off", CV_SAVE, CV_OnOff, NULL, 0, NULL, NUL
 static consvar_t cv_stretch = {"stretch", "Off", CV_SAVE|CV_NOSHOWHELP, CV_OnOff, NULL, 0, NULL, NULL, 0, 0, NULL};
 
 static CV_PossibleValue_t scalequality_cons_t[] = {{0, "Nearest"}, {1, "Linear"}, {2, "Best"}, {0, NULL}};
-consvar_t cv_scalequality = {"vid_scalequality", "0", CV_SAVE|CV_CALL|CV_NOINIT, scalequality_cons_t, ScaleQuality_OnChange, 0, NULL, NULL, 0, 0, NULL};
+consvar_t cv_scalequality = {"vid_scalequality", "Nearest", CV_SAVE|CV_CALL|CV_NOINIT, scalequality_cons_t, ScaleQuality_OnChange, 0, NULL, NULL, 0, 0, NULL};
 
 UINT8 graphics_started = 0; // Is used in console.c and screen.c
 
