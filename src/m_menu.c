@@ -1233,7 +1233,8 @@ static menuitem_t OP_VideoOptionsMenu[] =
 static menuitem_t OP_AdvVideoOptionsMenu[] =
 {
 #if defined(HAVE_SDL)
-	{IT_STRING|IT_CVAR,		NULL,	"Scale Quality(SW)",		&cv_scalequality,		20},
+	{IT_HEADER,				NULL,	"SOFTWARE",					NULL,                 2},
+	{IT_STRING|IT_CVAR,		NULL,	"Scale Quality",		&cv_scalequality,		10},
 #endif	
 };
 
