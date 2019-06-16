@@ -2461,12 +2461,16 @@ const char *I_GetJoyName(INT32 joyindex)
 	return joyname;
 }
 
-void I_DoJoyRumble(void)
+void I_DoJoyRumble(INT32 player)
 {
-	if (SDL_HapticOpened(SDL_HapticIndex(joyhaptic)) && SDL_HapticRumbleSupported(joyhaptic))
-	{
-		SDL_HapticRumblePlay(joyhaptic, 0.5f, 1000);
-	}
+	if (player == 0)
+		SDL_JoystickRumble(JoyInfo.dev, 0xFFFF, 0xFFFF, 500);
+	else if (player == 1)
+		SDL_JoystickRumble(JoyInfo2.dev, 0xFFFF, 0xFFFF, 500);
+	else if (player == 2)
+		SDL_JoystickRumble(JoyInfo3.dev, 0xFFFF, 0xFFFF, 500);
+	else if (player == 3)
+		SDL_JoystickRumble(JoyInfo4.dev, 0xFFFF, 0xFFFF, 500);
 }
 
 

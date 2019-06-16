@@ -1363,7 +1363,7 @@ void K_KartBouncing(mobj_t *mobj1, mobj_t *mobj2, boolean bounce, boolean solid)
 	if (mobj2->player)
 	{
 		if (P_IsLocalPlayer(mobj2->player))
-			I_DoJoyRumble();
+			I_DoJoyRumble(mobj2->player->splitscreenindex);
 
 
 		mobj2->player->rmomx = mobj2->momx - mobj2->player->cmomx;
@@ -2128,7 +2128,7 @@ void K_SpinPlayer(player_t *player, mobj_t *source, INT32 type, mobj_t *inflicto
 	}
 
 	if (P_IsLocalPlayer(player))
-		I_DoJoyRumble();
+		I_DoJoyRumble(player->splitscreenindex);
 
 	player->kartstuff[k_spinouttimer] = (3*TICRATE/2)+2;
 	player->powers[pw_flashing] = K_GetKartFlashing(player);

@@ -202,7 +202,7 @@ void I_InitJoystick4(void);
 */
 INT32 I_NumJoys(void);
 
-void I_DoJoyRumble(void);
+void I_DoJoyRumble(INT32 player);
 
 /**	\brief	The *I_GetJoyName function
 
