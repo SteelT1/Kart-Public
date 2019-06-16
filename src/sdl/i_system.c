@@ -3066,8 +3066,8 @@ static void I_ShutdownTimer(void)
 //
 tic_t I_GetTime (void)
 {
-	static Uint32 basetime = 0;
-		   Uint32 ticks = SDL_GetTicks();
+	static Uint64 basetime = 0;
+		   Uint64 ticks = SDL_GetTicks();
 
 	if (!basetime)
 		basetime = ticks;
@@ -3153,7 +3153,7 @@ void I_Quit(void)
 	//added:16-02-98: when recording a demo, should exit using 'q' key,
 	//        but sometimes we forget and use 'F10'.. so save here too.
 
-	if (demorecording)
+	if (demo.recording)
 		G_CheckDemoStatus();
 	if (metalrecording)
 		G_StopMetalRecording();
@@ -3271,7 +3271,7 @@ void I_Error(const char *error, ...)
 	G_SaveGameData(false); // Tails 12-08-2002
 
 	// Shutdown. Here might be other errors.
-	if (demorecording)
+	if (demo.recording)
 		G_CheckDemoStatus();
 	if (metalrecording)
 		G_StopMetalRecording();

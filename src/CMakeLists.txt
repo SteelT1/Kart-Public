@@ -379,6 +379,12 @@ if(${SRB2_CONFIG_HAVE_PNG} AND ${SRB2_CONFIG_HAVE_ZLIB})
 			set(SRB2_HAVE_PNG ON)
 			add_definitions(-DHAVE_PNG)
 			add_definitions(-D_LARGEFILE64_SOURCE)
+			set(SRB2_PNG_SOURCES apng.c)
+			set(SRB2_PNG_HEADERS apng.h)
+			prepend_sources(SRB2_PNG_SOURCES)
+			prepend_sources(SRB2_PNG_HEADERS)
+			source_group("Main" FILES ${SRB2_CORE_SOURCES} ${SRB2_CORE_HEADERS}
+				${SRB2_PNG_SOURCES} ${SRB2_PNG_HEADERS})
 		else()
 			message(WARNING "You have specified that PNG is available but it was not found. SRB2Kart may not compile correctly.")
 		endif()
@@ -395,7 +401,11 @@ if(${SRB2_CONFIG_HWRENDER})
 		${CMAKE_CURRENT_SOURCE_DIR}/hardware/hw_light.c
 		${CMAKE_CURRENT_SOURCE_DIR}/hardware/hw_main.c
 		${CMAKE_CURRENT_SOURCE_DIR}/hardware/hw_md2.c
+		${CMAKE_CURRENT_SOURCE_DIR}/hardware/hw_md2load.c
+		${CMAKE_CURRENT_SOURCE_DIR}/hardware/hw_md3load.c
+		${CMAKE_CURRENT_SOURCE_DIR}/hardware/hw_model.c
 		${CMAKE_CURRENT_SOURCE_DIR}/hardware/hw_trick.c
+		${CMAKE_CURRENT_SOURCE_DIR}/hardware/u_list.c
 	)
 
 	set (SRB2_HWRENDER_HEADERS
@@ -409,6 +419,10 @@ if(${SRB2_CONFIG_HWRENDER})
 		${CMAKE_CURRENT_SOURCE_DIR}/hardware/hw_light.h
 		${CMAKE_CURRENT_SOURCE_DIR}/hardware/hw_main.h
 		${CMAKE_CURRENT_SOURCE_DIR}/hardware/hw_md2.h
+		${CMAKE_CURRENT_SOURCE_DIR}/hardware/hw_md2load.h
+		${CMAKE_CURRENT_SOURCE_DIR}/hardware/hw_md3load.h
+		${CMAKE_CURRENT_SOURCE_DIR}/hardware/hw_model.h
+		${CMAKE_CURRENT_SOURCE_DIR}/hardware/u_list.h
 	)
 
 	set(SRB2_R_OPENGL_SOURCES
