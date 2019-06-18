@@ -704,6 +704,9 @@ void D_RegisterServerCommands(void)
 	CV_RegisterVar(&cv_maxping);
 	CV_RegisterVar(&cv_pingtimeout);
 	CV_RegisterVar(&cv_showping);
+#ifdef HAVE_CURL
+	CV_RegisterVar(&cv_downloadurl);
+#endif
 
 #ifdef SEENAMES
 	 CV_RegisterVar(&cv_allowseenames);

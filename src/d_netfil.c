@@ -162,6 +162,10 @@ UINT8 *PutFileNeeded(UINT16 firstfile)
 	else
 		netbuffer->u.serverinfo.fileneedednum = count;
 
+#ifdef HAVE_CURL
+	WRITESTRINGN(p, cv_downloadurl.string, 255);
+#endif
+
 	return p;
 }
 
@@ -189,6 +193,9 @@ void D_ParseFileneeded(INT32 fileneedednum_parm, UINT8 *fileneededstr, UINT16 fi
 		READSTRINGN(p, fileneeded[i].filename, MAX_WADPATH); // The next bytes are the file name
 		READMEM(p, fileneeded[i].md5sum, 16); // The last 16 bytes are the file checksum
 	}
+#ifdef HAVE_CURL
+	READSTRINGN(p, downloadurl, 255); // URL to download files from, if set
+#endif
 }
 
 void CL_PrepareDownloadSaveGame(const char *tmpsave)

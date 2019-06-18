@@ -436,6 +436,7 @@ typedef struct
 	UINT8 num;
 	UINT8 more;
 	UINT8 files[MAXFILENEEDED]; // is filled with writexxx (byteptr.h)
+	char downloadurl[255]; // http/https URL to download files from
 } ATTRPACK filesneededconfig_pak;
 
 //
@@ -542,6 +543,11 @@ extern consvar_t
 	cv_joinnextround,
 #endif
 	cv_netticbuffer, cv_allownewplayer, cv_maxplayers, cv_resynchattempts, cv_blamecfail, cv_maxsend, cv_noticedownload, cv_downloadspeed;
+
+#ifdef HAVE_CURL
+extern char downloadurl[255];
+extern consvar_t cv_downloadurl;
+#endif
 
 // Used in d_net, the only dependence
 tic_t ExpandTics(INT32 low);

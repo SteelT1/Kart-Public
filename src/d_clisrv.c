@@ -144,6 +144,10 @@ char connectedservername[MAXSERVERNAME];
 /// \todo WORK!
 boolean acceptnewnode = true;
 
+#ifdef HAVE_CURL
+char downloadurl[255];
+#endif
+
 // engine
 
 // Must be a power of two
@@ -171,6 +175,10 @@ consvar_t cv_showjoinaddress = {"showjoinaddress", "On", CV_SAVE, CV_OnOff, NULL
 
 static CV_PossibleValue_t playbackspeed_cons_t[] = {{1, "MIN"}, {10, "MAX"}, {0, NULL}};
 consvar_t cv_playbackspeed = {"playbackspeed", "1", 0, playbackspeed_cons_t, NULL, 0, NULL, NULL, 0, 0, NULL};
+
+#ifdef HAVE_CURL
+consvar_t cv_downloadurl = {"downloadurl", "", CV_SAVE, NULL, NULL, 0, NULL, NULL, 0, 0, NULL};
+#endif
 
 static inline void *G_DcpyTiccmd(void* dest, const ticcmd_t* src, const size_t n)
 {
@@ -1892,6 +1900,9 @@ void CL_UpdateServerList(boolean internetsearch, INT32 room)
 static boolean CL_FinishedFileList(void)
 {
 	INT32 i;
+#ifdef HAVE_CURL
+	CONS_Printf("Download url: %s\n", downloadurl);
+#endif
 	CONS_Printf(M_GetText("Checking files...\n"));
 	i = CL_CheckFiles();
 	if (i == 3) // too many files
@@ -2744,6 +2755,9 @@ void CL_Reset(void)
 
 	// make sure we don't leave any fileneeded gunk over from a failed join
 	fileneedednum = 0;
+#ifdef HAVE_CURL
+	downloadurl[0] = '\0';
+#endif
 	memset(fileneeded, 0, sizeof(fileneeded));
 
 	// D_StartTitle should get done now, but the calling function will handle it
