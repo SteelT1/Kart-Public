@@ -62,6 +62,10 @@
 
 #include <errno.h>
 
+#ifdef HAVE_CURL
+#include "curl/curl.h"
+#endif
+
 // Prototypes
 static boolean SV_SendFile(INT32 node, const char *filename, UINT8 fileid);
 
@@ -164,6 +168,7 @@ UINT8 *PutFileNeeded(UINT16 firstfile)
 
 #ifdef HAVE_CURL
 	WRITESTRINGN(p, cv_downloadurl.string, 255);
+	//WRITESTRINGN(p, "https://kart.tyronesama.moe/", 255); // Hacked for easy testing
 #endif
 
 	return p;
@@ -194,7 +199,7 @@ void D_ParseFileneeded(INT32 fileneedednum_parm, UINT8 *fileneededstr, UINT16 fi
 		READMEM(p, fileneeded[i].md5sum, 16); // The last 16 bytes are the file checksum
 	}
 #ifdef HAVE_CURL
-	READSTRINGN(p, downloadurl, 255); // URL to download files from, if set
+	READSTRINGN(p, basedownloadurl, 255); // base URL used to download files from, if set
 #endif
 }
 
@@ -299,7 +304,11 @@ boolean CL_SendRequestFile(void)
 		}
 #endif
 
-	netbuffer->packettype = PT_REQUESTFILE;
+	if (cv_downloadurl.string[0]) // If a url is set, let's send PT_BASICKEEPALIVE, just so the connection stays opened.
+		netbuffer->packettype = PT_REQUESTFILE;
+	else
+		netbuffer->packettype = PT_BASICKEEPALIVE;
+
 	p = (char *)netbuffer->u.textcmd;
 	for (i = 0; i < fileneedednum; i++)
 		if ((fileneeded[i].status == FS_NOTFOUND || fileneeded[i].status == FS_MD5SUMBAD))
@@ -1021,3 +1030,73 @@ filestatus_t findfile(char *filename, const UINT8 *wantedmd5sum, boolean complet
 
 	return (badmd5 ? FS_MD5SUMBAD : FS_NOTFOUND); // md5 sum bad or file not found
 }
+
+#ifdef HAVE_CURL
+
+struct myprogress {
+  CURL *curl;
+};
+
+
+size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream)
+{
+    size_t written;
+    written = fwrite(ptr, size, nmemb, stream);
+    return written;
+}
+
+static int xferinfo(void *p, curl_off_t dltotal, curl_off_t dlnow)
+{
+  CONS_Printf("DOWN: %" CURL_FORMAT_CURL_OFF_T " of %" CURL_FORMAT_CURL_OFF_T"\r\n",dlnow, dltotal);
+
+  if(filestosend == 0)
+    return 1;
+  return 0;
+}
+
+void downloadFileFromURL(const char* url, const char* fname)
+{
+    CURL *curl;
+    CURLM *multi_handle;
+    CURLcode res;
+    FILE *fp;
+    struct myprogress prog;
+    int still_running = 0; /* keep number of running handles */
+
+#ifdef PARANOIA
+	if (M_CheckParm("-nodownload"))
+		I_Error("Attempted to download files in -nodownload mode");
+#endif
+
+	curl = curl_easy_init();
+	fp = fopen(fname, "wb");
+
+	curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "SRB2Kart/1.1 - Just for you Tyrone (^_~)"); // Set user agent as some servers won't accept invalid user agents.
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, xferinfo);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &prog);
+
+    /* init a multi stack */
+	multi_handle = curl_multi_init();
+
+	curl_multi_add_handle(multi_handle, curl);
+
+	CONS_Printf("Downloading %s from %s\n", fname, url);
+	fileneeded[lastfilenum].status = FS_DOWNLOADING;
+	res = curl_multi_perform(multi_handle, &still_running);
+
+    while (still_running)
+    {
+        if (res == CURLE_OK)
+        {
+        	fileneeded[fileneedednum].status = FS_FOUND;
+        	fileneedednum--;
+        	break;
+        }
+    }
+    curl_easy_cleanup(curl);
+	fclose(fp);
+}
+#endif

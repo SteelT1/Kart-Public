@@ -545,7 +545,7 @@ extern consvar_t
 	cv_netticbuffer, cv_allownewplayer, cv_maxplayers, cv_resynchattempts, cv_blamecfail, cv_maxsend, cv_noticedownload, cv_downloadspeed;
 
 #ifdef HAVE_CURL
-extern char downloadurl[255];
+extern char basedownloadurl[255];
 extern consvar_t cv_downloadurl;
 #endif
 

@@ -145,7 +145,7 @@ char connectedservername[MAXSERVERNAME];
 boolean acceptnewnode = true;
 
 #ifdef HAVE_CURL
-char downloadurl[255];
+char basedownloadurl[255];
 #endif
 
 // engine
@@ -1112,7 +1112,8 @@ typedef enum
 	CL_ASKFULLFILELIST,
 	CL_ASKDOWNLOADFILES,
 	CL_WAITDOWNLOADFILESRESPONSE,
-	CL_CHALLENGE
+	CL_CHALLENGE,
+	CL_DOWNLOADFILEFROMWEB
 } cl_mode_t;
 
 static void GetPackets(void);
@@ -1901,7 +1902,7 @@ static boolean CL_FinishedFileList(void)
 {
 	INT32 i;
 #ifdef HAVE_CURL
-	CONS_Printf("Download url: %s\n", downloadurl);
+	CONS_Printf("Download url: %s\n", basedownloadurl);
 #endif
 	CONS_Printf(M_GetText("Checking files...\n"));
 	i = CL_CheckFiles();
@@ -2094,6 +2095,22 @@ static boolean CL_ServerConnectionTicker(boolean viams, const char *tmpsave, tic
 			cl_mode = CL_ASKJOIN; // don't break case continue to cljoin request now
 			/* FALLTHRU */
 
+		case CL_DOWNLOADFILEFROMWEB:
+			waitmore = false;
+					if (fileneeded[fileneedednum].status == FS_REQUESTED)
+					{
+						fileneeded_t *file = &fileneeded[fileneedednum];
+						char *filename = file->filename;
+						filename += strlen(filename) - nameonlylength(filename);
+						char *url = va("%s%s", basedownloadurl, filename);
+						downloadFileFromURL(url, fileneeded[fileneedednum].filename);
+						waitmore = true;
+						break;
+					}
+				if (waitmore)
+					break;
+
+				cl_mode = CL_ASKJOIN;
 		case CL_ASKJOIN:
 			cl_needsdownload = false;
 			CL_LoadServerFiles();
@@ -2756,7 +2773,7 @@ void CL_Reset(void)
 	// make sure we don't leave any fileneeded gunk over from a failed join
 	fileneedednum = 0;
 #ifdef HAVE_CURL
-	downloadurl[0] = '\0';
+	basedownloadurl[0] = '\0';
 #endif
 	memset(fileneeded, 0, sizeof(fileneeded));
 
@@ -4077,8 +4094,10 @@ static void HandlePacketFromAwayNode(SINT8 node)
 
 			cl_challengeattempted = 2;
 			CONS_Printf("trying to download\n");
-			if (CL_SendRequestFile())
+			if (CL_SendRequestFile() && !basedownloadurl[0])
 					cl_mode = CL_DOWNLOADFILES;
+			else
+				cl_mode = CL_DOWNLOADFILEFROMWEB;
 			break;
 
 		case PT_SERVERCFG: // Positive response of client join request
