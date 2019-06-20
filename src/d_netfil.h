@@ -81,7 +81,9 @@ filestatus_t findfile(char *filename, const UINT8 *wantedmd5sum,
 filestatus_t checkfilemd5(char *filename, const UINT8 *wantedmd5sum);
 
 #ifdef HAVE_CURL
-void downloadFileFromURL(const char* url, const char* fname);
+void downloadFileFromURL(const char* url, const char* fname, int filenum);
+INT32 failedwebdownloads;
+extern boolean curldownloading;
 #endif
 
 void nameonly(char *s);

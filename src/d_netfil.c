@@ -105,6 +105,13 @@ char downloaddir[512] = "DOWNLOAD";
 INT32 lastfilenum = -1;
 #endif
 
+#ifdef HAVE_CURL
+struct curlprogress {
+  CURL *curl;
+};
+boolean curldownloading;
+#endif
+
 /** Fills a serverinfo packet with information about wad files loaded.
   *
   * \todo Give this function a better name since it is in global scope.
@@ -304,10 +311,10 @@ boolean CL_SendRequestFile(void)
 		}
 #endif
 
-	if (cv_downloadurl.string[0]) // If a url is set, let's send PT_BASICKEEPALIVE, just so the connection stays opened.
+	if (!cv_downloadurl.string[0] || failedwebdownloads > 0)
 		netbuffer->packettype = PT_REQUESTFILE;
 	else
-		netbuffer->packettype = PT_BASICKEEPALIVE;
+		netbuffer->packettype = PT_BASICKEEPALIVE; // If a url is set, let's send PT_BASICKEEPALIVE, just so the connection stays opened.
 
 	p = (char *)netbuffer->u.textcmd;
 	for (i = 0; i < fileneedednum; i++)
@@ -1032,12 +1039,6 @@ filestatus_t findfile(char *filename, const UINT8 *wantedmd5sum, boolean complet
 }
 
 #ifdef HAVE_CURL
-
-struct myprogress {
-  CURL *curl;
-};
-
-
 size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
     size_t written;
@@ -1047,56 +1048,119 @@ size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream)
 
 static int xferinfo(void *p, curl_off_t dltotal, curl_off_t dlnow)
 {
-  CONS_Printf("DOWN: %" CURL_FORMAT_CURL_OFF_T " of %" CURL_FORMAT_CURL_OFF_T"\r\n",dlnow, dltotal);
-
-  if(filestosend == 0)
-    return 1;
+  CONS_Printf("DOWN: %" CURL_FORMAT_CURL_OFF_T " of %" CURL_FORMAT_CURL_OFF_T"\n",dlnow, dltotal);
   return 0;
 }
 
-void downloadFileFromURL(const char* url, const char* fname)
+void downloadFileFromURL(const char* url, const char* fname, int filenum)
 {
-    CURL *curl;
-    CURLM *multi_handle;
-    CURLcode res;
-    FILE *fp;
-    struct myprogress prog;
-    int still_running = 0; /* keep number of running handles */
+    CURL *http_handle = NULL;
+	CURLM *multi_handle = NULL;
+	FILE *fp;
+	struct CURLMsg *m;
+	struct curlprogress prog;
+	CURLcode res;
+	long response_code;
+	CURLcode return_code;
+ 	int still_running = 0, msgq = 0;
 
 #ifdef PARANOIA
 	if (M_CheckParm("-nodownload"))
 		I_Error("Attempted to download files in -nodownload mode");
 #endif
 
-	curl = curl_easy_init();
+	curl_global_init(CURL_GLOBAL_DEFAULT);
+
+	http_handle = curl_easy_init();
+
 	fp = fopen(fname, "wb");
 
-	curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "SRB2Kart/1.1 - Just for you Tyrone (^_~)"); // Set user agent as some servers won't accept invalid user agents.
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
-    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, xferinfo);
-    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &prog);
+	curl_easy_setopt(http_handle, CURLOPT_URL, url);
+    curl_easy_setopt(http_handle, CURLOPT_USERAGENT, "SRB2Kart/1.1 - Just for you Tyrone (^_~)"); // Set user agent as some servers won't accept invalid user agents.
+    curl_easy_setopt(http_handle, CURLOPT_WRITEFUNCTION, write_data);
+    curl_easy_setopt(http_handle, CURLOPT_WRITEDATA, fp);
+    curl_easy_setopt(http_handle, CURLOPT_XFERINFOFUNCTION, xferinfo);
+    curl_easy_setopt(http_handle, CURLOPT_XFERINFODATA, &prog);
+    curl_easy_setopt(http_handle, CURLOPT_NOPROGRESS, 0L);
+
+    //If we get redirected, follow it
+    curl_easy_setopt(http_handle, CURLOPT_FOLLOWLOCATION, 1L);
+
+    res = curl_easy_perform(http_handle);
+	{
+		if (res == CURLE_OK)
+		{
+			curl_easy_getinfo(http_handle, CURLINFO_RESPONSE_CODE, &response_code);
+		}
+	}
+\
+	CONS_Printf("HTTP Response code for %s: %ld\n", url, response_code);
+
+    // In case we get this far
+    if (response_code != 200)
+    {
+    	fileneeded[filenum].status = FS_REQUESTED;
+    	failedwebdownloads++;
+    	return;
+    }
 
     /* init a multi stack */
 	multi_handle = curl_multi_init();
 
-	curl_multi_add_handle(multi_handle, curl);
+	// Add our download handle
+	curl_multi_add_handle(multi_handle, http_handle);
 
-	CONS_Printf("Downloading %s from %s\n", fname, url);
-	fileneeded[lastfilenum].status = FS_DOWNLOADING;
-	res = curl_multi_perform(multi_handle, &still_running);
+	fileneeded[filenum].status = FS_DOWNLOADING;
+	CONS_Printf("Downloading %s\n", url);
 
-    while (still_running)
-    {
-        if (res == CURLE_OK)
-        {
-        	fileneeded[fileneedednum].status = FS_FOUND;
-        	fileneedednum--;
-        	break;
-        }
-    }
-    curl_easy_cleanup(curl);
-	fclose(fp);
+	while(still_running)
+	{
+		CURLMcode mc; // curl_multi_wait() return code
+    	int numfds;
+
+		/* wait for activity, timeout or "nothing" */
+		mc = curl_multi_wait(multi_handle, NULL, 0, 1000, &numfds);
+
+		if (mc != CURLM_OK)
+		{
+			CONS_Alert(CONS_ERROR, "curl_multi_wait() failed, code %d.\n", mc);
+			break;
+    	}
+	curl_multi_perform(multi_handle, &still_running);
+  	}
+
+  	m = curl_multi_info_read(multi_handle, &msgq);
+
+  	/* See how the transfer went */
+	while(m != NULL)
+	{
+		if (m->msg == CURLMSG_DONE)
+		{
+			return_code = m->data.result;
+			CONS_Printf("%d\n", return_code);
+			if (return_code != CURLE_OK)
+			{
+				fileneeded[filenum].status = FS_REQUESTED;
+				failedwebdownloads++;
+				break;
+			}
+			else
+			{
+				fileneeded[filenum].status = FS_FOUND;
+				break;
+			}
+		}
+	}
+
+	CONS_Printf("\n");
+	CONS_Printf(M_GetText("Downloading %s...(done)\n"), fname);
+
+	curl_multi_remove_handle(multi_handle, http_handle);
+	curl_easy_cleanup(http_handle);
+	curl_multi_cleanup(multi_handle);
+	curl_global_cleanup();
+
+	if (fp)
+		fclose(fp);
 }
 #endif

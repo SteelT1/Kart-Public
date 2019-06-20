@@ -2096,21 +2096,31 @@ static boolean CL_ServerConnectionTicker(boolean viams, const char *tmpsave, tic
 			/* FALLTHRU */
 
 		case CL_DOWNLOADFILEFROMWEB:
-			waitmore = false;
-					if (fileneeded[fileneedednum].status == FS_REQUESTED)
+			for (i = 0; i < fileneedednum; i++)
+				if (fileneeded[i].status == FS_DOWNLOADING || fileneeded[i].status == FS_REQUESTED)
+				{
+					fileneeded_t *file = &fileneeded[i];
+					char *filename = file->filename;
+					filename += strlen(filename) - nameonlylength(filename);
+					char *url = va("%s%s", basedownloadurl, filename);
+					downloadFileFromURL(url, fileneeded[i].filename, i);
+
+					if (netbuffer->packettype == PT_FILEFRAGMENT)
+						CONS_Printf("PT_FILEFRAGMENT\n");
+					else if (netbuffer->packettype == PT_BASICKEEPALIVE)
+						CONS_Printf("PT_BASICKEEPALIVE\n");
+
+					if (failedwebdownloads > 0)
 					{
-						fileneeded_t *file = &fileneeded[fileneedednum];
-						char *filename = file->filename;
-						filename += strlen(filename) - nameonlylength(filename);
-						char *url = va("%s%s", basedownloadurl, filename);
-						downloadFileFromURL(url, fileneeded[fileneedednum].filename);
-						waitmore = true;
+						cl_mode = CL_ASKDOWNLOADFILES;
 						break;
 					}
-				if (waitmore)
-					break;
+				}
 
-				cl_mode = CL_ASKJOIN;
+			if (fileneeded[fileneedednum].status == FS_FOUND)
+				break;
+
+			cl_mode = CL_ASKJOIN;
 		case CL_ASKJOIN:
 			cl_needsdownload = false;
 			CL_LoadServerFiles();
@@ -4094,10 +4104,13 @@ static void HandlePacketFromAwayNode(SINT8 node)
 
 			cl_challengeattempted = 2;
 			CONS_Printf("trying to download\n");
-			if (CL_SendRequestFile() && !basedownloadurl[0])
+			if (CL_SendRequestFile())
+			{
+				if (!basedownloadurl[0] || failedwebdownloads > 0)
 					cl_mode = CL_DOWNLOADFILES;
-			else
-				cl_mode = CL_DOWNLOADFILEFROMWEB;
+				else
+					cl_mode = CL_DOWNLOADFILEFROMWEB;
+			}
 			break;
 
 		case PT_SERVERCFG: // Positive response of client join request
