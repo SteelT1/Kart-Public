@@ -104,6 +104,12 @@ typedef struct polyobj_s
 
 	// these are saved for netgames, so do not let Lua touch these!
 	INT32 spawnflags; // Flags the polyobject originally spawned with
+
+	vertex_t *oldVerts; // previous frame
+	vertex_t *newVerts; // current frame
+	vertex_t oldCenterPt;
+	vertex_t newCenterPt;
+	INT32 firstlerp;
 } polyobj_t;
 
 //

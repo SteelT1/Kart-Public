@@ -1254,6 +1254,8 @@ static menuitem_t OP_VideoOptionsMenu[] =
 	{IT_STRING | IT_CVAR,	NULL,	"Fallback Player 3D Model",	&cv_grfallbackplayermodel,	125},
 	{IT_SUBMENU|IT_STRING,	NULL,	"OpenGL Options...",	&OP_OpenGLOptionsDef,   135},
 #endif
+
+	{IT_STRING | IT_CVAR,	NULL, "Interpolate Frames",  &cv_frameinterpolation, 120},
 };
 
 enum

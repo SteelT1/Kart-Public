@@ -2909,7 +2909,11 @@ void I_StartupTimer(void)
 #endif
 }
 
-
+fixed_t I_GetTimeFrac(void)
+{
+  //stub
+  return 0;
+}
 
 void I_Sleep(void)
 {
