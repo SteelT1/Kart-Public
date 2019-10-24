@@ -131,7 +131,7 @@ static void LerpPolyobjState(polyobj_t *pobj, fixed_t frac)
 // recalc necessary stuff for mouseaiming
 // slopes are already calculated for the full possible view (which is 4*viewheight).
 // 18/08/18: (No it's actually 16*viewheight, thanks Jimita for finding this out)
-static void R_SetupFreelook(void)
+void R_SetupFreelook(void)
 {
 	INT32 dy = 0;
 	if (rendermode == render_soft)
