@@ -47,6 +47,7 @@
 #include "lua_script.h"
 #include "lua_hook.h"
 #include "k_kart.h"
+#include "r_fps.h"
 
 #ifdef CLIENT_LOADINGSCREEN
 // cl loading screen
@@ -5458,6 +5459,9 @@ void NetUpdate(void)
 	INT32 i;
 	INT32 realtics;
 
+	if (!d_realtics && !singletics)
+		return;
+
 	nowtime = I_GetTime();
 	realtics = nowtime - gametime;
 
@@ -5470,6 +5474,8 @@ void NetUpdate(void)
 		else
 			realtics = 5;
 	}
+
+	R_StashThinkerLerp();
 
 	gametime = nowtime;
 
@@ -5548,6 +5554,8 @@ FILESTAMP
 		CON_Ticker();
 	}
 	SV_FileSendTicker();
+
+	R_RestoreThinkerLerp();
 }
 
 /** Returns the number of players playing.

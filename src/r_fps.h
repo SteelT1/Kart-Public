@@ -54,6 +54,8 @@ void R_UpdateViewInterpolation(void);
 void R_SetViewContext(enum viewcontext_e _viewcontext);
 void R_SetThinkerOldStates(void);
 void R_SetThinkerNewStates(void);
+void R_StashThinkerLerp(void);
+void R_RestoreThinkerLerp(void);
 void R_DoThinkerLerp(fixed_t frac);
 void R_ResetThinkerLerp(void);
 

@@ -53,7 +53,9 @@ enum viewcontext_e viewcontext = VIEWCONTEXT_PLAYER1;
 #ifdef POLYOBJECTS
 static void SetPolyobjOldState(polyobj_t *pobj)
 {
-	for (unsigned int i = 0; i < pobj->numVertices; i++)
+	unsigned int i;
+
+	for (i = 0; i < pobj->numVertices; i++)
 	{
 		vertex_t *vert = &pobj->newVerts[i];
 		pobj->oldVerts[i].x = vert->x;
@@ -65,10 +67,12 @@ static void SetPolyobjOldState(polyobj_t *pobj)
 
 static void SetPolyobjNewState(polyobj_t *pobj)
 {
+	unsigned int i;
+
 	if (pobj->firstlerp != 1)
 	{
 		pobj->firstlerp = 1;
-		for (unsigned int i = 0; i < pobj->numVertices; i++)
+		for (i = 0; i < pobj->numVertices; i++)
 		{
 			vertex_t *vert = pobj->vertices[i];
 			pobj->oldVerts[i].x = vert->x;
@@ -78,7 +82,7 @@ static void SetPolyobjNewState(polyobj_t *pobj)
 		pobj->oldCenterPt = pobj->centerPt;
 	}
 
-	for (unsigned int i = 0; i < pobj->numVertices; i++)
+	for (i = 0; i < pobj->numVertices; i++)
 	{
 		vertex_t *vert = pobj->vertices[i];
 		pobj->newVerts[i].x = vert->x;
@@ -90,7 +94,9 @@ static void SetPolyobjNewState(polyobj_t *pobj)
 
 static void ResetPolyobjState(polyobj_t *pobj)
 {
-	for (unsigned int i = 0; i < pobj->numVertices; i++)
+	unsigned int i;
+
+	for (i = 0; i < pobj->numVertices; i++)
 	{
 		vertex_t *vert = &pobj->newVerts[i];
 		pobj->vertices[i]->x = vert->x;
@@ -102,7 +108,9 @@ static void ResetPolyobjState(polyobj_t *pobj)
 
 static void LerpPolyobjState(polyobj_t *pobj, fixed_t frac)
 {
-	for (unsigned int i = 0; i < pobj->numVertices; i++)
+	unsigned int i;
+
+	for (i = 0; i < pobj->numVertices; i++)
 	{
 		vertex_t *oldVert = &pobj->oldVerts[i];
 		vertex_t *newVert = &pobj->newVerts[i];
@@ -654,6 +662,49 @@ void R_SetThinkerNewStates(void)
 		if (ISA(T_Pusher))
 		{
 			//CAST(f, pusher_t);
+		}
+	}
+}
+
+void R_StashThinkerLerp(void)
+{
+	thinker_t *th;
+
+	for (th = thinkercap.next; th != &thinkercap; th = th->next)
+	{
+		if (th == NULL)
+		{
+			break;
+		}
+		if (ISA(P_MobjThinker))
+		{
+			CAST(mo, mobj_t);
+			mo->lerp_x = mo->x;
+			mo->lerp_y = mo->y;
+			mo->lerp_z = mo->z;
+			mo->x = mo->new_x;
+			mo->y = mo->new_y;
+			mo->z = mo->new_z;
+		}
+	}
+}
+
+void R_RestoreThinkerLerp(void)
+{
+	thinker_t *th;
+
+	for (th = thinkercap.next; th != &thinkercap; th = th->next)
+	{
+		if (th == NULL)
+		{
+			break;
+		}
+		if (ISA(P_MobjThinker))
+		{
+			CAST(mo, mobj_t);
+			mo->x = mo->lerp_x;
+			mo->y = mo->lerp_y;
+			mo->z = mo->lerp_z;
 		}
 	}
 }

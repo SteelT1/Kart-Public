@@ -277,6 +277,7 @@ typedef struct mobj_s
 	fixed_t new_x, new_y, new_z;
 	fixed_t old_x, old_y, old_z; // position interpolation
 	INT32 firstlerp; // set after first lerp iteration so we don't lose positions on first frame
+	fixed_t lerp_x, lerp_y, lerp_z;
 
 	// More list: links in sector (if needed)
 	struct mobj_s *snext;

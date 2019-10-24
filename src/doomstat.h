@@ -534,6 +534,8 @@ extern boolean precache;
 //  to force a wipe on the next draw
 extern gamestate_t wipegamestate;
 
+extern tic_t d_realtics;
+
 // debug flag to cancel adaptiveness
 extern boolean singletics;
 

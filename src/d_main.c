@@ -116,6 +116,7 @@ static char *startuppwads[MAX_WADFILES];
 
 boolean devparm = false; // started game with -devparm
 
+tic_t   d_realtics;
 boolean singletics = false; // timedemo
 boolean lastdraw = false;
 
@@ -613,7 +614,7 @@ tic_t rendergametic;
 
 void D_SRB2Loop(void)
 {
-	tic_t oldentertics = 0, entertic = 0, realtics = 0, rendertimeout = INFTICS;
+	tic_t oldentertics = 0, entertic = 0, rendertimeout = INFTICS;
 
 	if (dedicated)
 		server = true;
@@ -662,18 +663,18 @@ void D_SRB2Loop(void)
 
 		// get real tics
 		entertic = I_GetTime();
-		realtics = entertic - oldentertics;
+		d_realtics = entertic - oldentertics;
 		oldentertics = entertic;
 
 		refreshdirmenu = 0; // not sure where to put this, here as good as any?
 
 #ifdef DEBUGFILE
-		if (!realtics)
+		if (!d_realtics)
 			if (debugload)
 				debugload--;
 #endif
 
-		if (!realtics && !singletics && cv_frameinterpolation.value != 1)
+		if (!d_realtics && !singletics && cv_frameinterpolation.value != 1)
 		{
 			I_Sleep();
 			continue;
@@ -685,12 +686,13 @@ void D_SRB2Loop(void)
 
 		// don't skip more than 10 frames at a time
 		// (fadein / fadeout cause massive frame skip!)
-		if (realtics > 8)
-			realtics = 1;
+		if (d_realtics > 8)
+			d_realtics = 1;
 
 		// process tics (but maybe not if realtic == 0)
-		tic_happened = realtics ? true : false;
-		TryRunTics(realtics);
+		tic_happened = d_realtics ? true : false;
+		if (d_realtics || singletics)
+			TryRunTics(d_realtics);
 
 		if (cv_frameinterpolation.value == 1)
 		{
