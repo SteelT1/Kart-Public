@@ -140,7 +140,6 @@ typedef enum
 levellist_mode_t levellistmode = LLM_CREATESERVER;
 UINT8 maplistoption = 0;
 
-static char joystickInfo[8][29];
 #ifndef NONET
 static UINT32 serverlistpage;
 #endif
@@ -9672,9 +9671,9 @@ static void M_DrawJoystick(void)
 			|| (setupcontrolplayer == 3 && (i == compareval3))
 			|| (setupcontrolplayer == 2 && (i == compareval2))
 			|| (setupcontrolplayer == 1 && (i == compareval)))
-			V_DrawString(OP_JoystickSetDef.x, OP_JoystickSetDef.y+LINEHEIGHT*i-4,V_GREENMAP,joystickInfo[i]);
+			V_DrawString(OP_JoystickSetDef.x, OP_JoystickSetDef.y+LINEHEIGHT*i-4,V_GREENMAP,joydevices[i].name);
 		else
-			V_DrawString(OP_JoystickSetDef.x, OP_JoystickSetDef.y+LINEHEIGHT*i-4,0,joystickInfo[i]);
+			V_DrawString(OP_JoystickSetDef.x, OP_JoystickSetDef.y+LINEHEIGHT*i-4,0,joydevices[i].name);
 	}
 }
 
@@ -9685,14 +9684,14 @@ void M_SetupJoystickMenu(INT32 choice)
 	INT32 n = I_NumJoys();
 	(void)choice;
 
-	strcpy(joystickInfo[i], "None");
+	strcpy(joydevices[i].name, "None");
 
 	for (i = 1; i < 8; i++)
 	{
 		if (i <= n && (I_GetJoyName(i)) != NULL)
-			strncpy(joystickInfo[i], I_GetJoyName(i), 28);
+			strncpy(joydevices[i].name, I_GetJoyName(i), 28);
 		else
-			strcpy(joystickInfo[i], joyNA);
+			strcpy(joydevices[i].name, joyNA);
 
 #ifdef JOYSTICK_HOTPLUG
 		// We use cv_usejoystick.string as the USER-SET var

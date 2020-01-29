@@ -62,6 +62,10 @@ JoyType_t Joystick2;
 JoyType_t Joystick3;
 JoyType_t Joystick4;
 
+#ifdef HAVE_SDL
+	JoyDev_t joydevices[MAX_JOYSTICKS];
+#endif
+
 // 1024 bytes is plenty for a savegame
 #define SAVEGAMESIZE (1024)
 

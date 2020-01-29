@@ -23,6 +23,7 @@
 #include "lua_script.h"
 #include "lua_hook.h"
 #include "k_kart.h"
+#include "i_system.h"
 
 // Object place
 #include "m_cheat.h"
@@ -740,6 +741,10 @@ void P_Ticker(boolean run)
 			quake.y = M_RandomRange(-ir,ir);
 			quake.z = M_RandomRange(-ir,ir);
 			--quake.time;
+
+			for (i = 0; i < MAXPLAYERS; i++)
+				if (playeringame[i] && players[i].mo && !P_MobjWasRemoved(players[i].mo))
+					I_DoJoyRumble(players[i].splitscreenindex, 0.7, 320);
 		}
 		else
 			quake.x = quake.y = quake.z = 0;

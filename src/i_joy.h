@@ -15,6 +15,14 @@
 
 #include "g_input.h"
 
+#ifdef HAVE_SDL
+#include "SDL.h"
+#include "sdl/sdlmain.h"
+#endif
+
+// Max gamepad/joysticks that can be detected/used.
+#define MAX_JOYSTICKS 8
+
 /*!
   \brief	-JOYAXISRANGE to +JOYAXISRANGE for each axis
 
@@ -54,5 +62,21 @@ typedef struct JoyType_s JoyType_t;
 */
 
 extern JoyType_t Joystick, Joystick2, Joystick3, Joystick4;
+
+/**	\brief	The struct JoyDev_s
+
+ Holds the names of the joystick devices and interface info about the devices.
+*/
+
+#ifdef HAVE_SDL
+typedef struct JoyDev_s
+{
+	char name[29];
+	SDLJoyInfo_t info;
+	SDL_Haptic *haptic;
+} JoyDev_t;
+
+extern JoyDev_t joydevices[MAX_JOYSTICKS];
+#endif
 
 #endif // __I_JOY_H__
