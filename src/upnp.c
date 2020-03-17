@@ -1,7 +1,6 @@
 // SONIC ROBO BLAST 2
 //-----------------------------------------------------------------------------
-// Copyright (C) 2019 by Victor "SteelT" Fuentes.
-// Copyright (C) 2019 by Sonic Team Junior.
+// Copyright (C) 2020 by Victor "SteelT" Fuentes.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -12,30 +11,29 @@
 
 #include "doomdef.h"
 #include "i_system.h"
-
-#ifdef HAVE_MINIUPNPC
-#include "miniupnpc/miniwget.h"
 #include "miniupnpc/miniupnpc.h"
 #include "miniupnpc/upnpcommands.h"
 #include "miniupnpc/upnperrors.h"
 
-boolean UPNP_support = true;
+boolean UPNP_support = false;
+char upnp_portnum[8];
 
 struct UPNPDev *upnp_dev;
 int upnp_error;
-// Get the internal (LAN) IP address of the client
+// The internal (LAN) IP address
 char lan_address[64];
 
-// Get the external (WAN) IP address
+// The external (WAN) IP address
 char wan_address[64];
 
 struct UPNPUrls upnp_urls;
 struct IGDdatas upnp_data;
 
 void ShutdownUPnP(void);
-void InitUPnP(void);
+boolean InitUPnP(void);
 boolean AddPortMapping(const char *addr, const char *port);
 boolean DeletePortMapping(const char *port);
+boolean CheckPortMapping(void);
 
 void ShutdownUPnP(void)
 {
@@ -45,7 +43,7 @@ void ShutdownUPnP(void)
 	return;
 }
 
-void InitUPnP(void)
+boolean InitUPnP(void)
 {
 	int status;
 	int r;
@@ -61,7 +59,7 @@ void InitUPnP(void)
 			if (r != 0)
 			{
 				CONS_Alert(CONS_ERROR, M_GetText("Failed to get external IP address\n"));
-				UPNP_support = false;
+				return false;
 			}
 			CONS_Printf(M_GetText("Local IP address: %s\n"), lan_address);
 			CONS_Printf(M_GetText("External IP address: %s\n"), wan_address);
@@ -69,19 +67,16 @@ void InitUPnP(void)
 		else
 		{
 			CONS_Alert(CONS_ERROR, M_GetText("No valid IGD was found\n"));
-			UPNP_support = false;
+			return false;
 		}
 	}
 	else
 	{
 		CONS_Alert(CONS_ERROR, M_GetText("No UPnP devices discovered\n"));
-		UPNP_support = false;
+		return false;
 	}
 
-	if (!UPNP_support)
-		CONS_Alert(CONS_ERROR, M_GetText("Failed to initialize UPnP...\n"));
-
-	return;
+	return true;
 }
 
 boolean AddPortMapping(const char *addr, const char *port)
@@ -94,8 +89,7 @@ boolean AddPortMapping(const char *addr, const char *port)
 	if (!upnp_urls.controlURL || upnp_urls.controlURL[0] == '\0')
 		return false;
 
-	CONS_Printf(M_GetText("Adding port mapping for port: %s, protocol: UDP\n"), port);
-	status = UPNP_AddPortMapping(upnp_urls.controlURL, upnp_data.first.servicetype, port, port, addr, "SRB2", "UDP", NULL, 0);
+	status = UPNP_AddPortMapping(upnp_urls.controlURL, upnp_data.first.servicetype, port, port, addr, "SRB2Kart", "UDP", NULL, 0);
 
 	if (status != UPNPCOMMAND_SUCCESS)
 	{
@@ -112,7 +106,6 @@ boolean DeletePortMapping(const char *port)
 	if (!upnp_urls.controlURL || upnp_urls.controlURL[0] == '\0')
 		return false;
 
-	CONS_Printf(M_GetText("Deleting port mapping for port: %s, protocol: UDP\n"), port);
 	status = UPNP_DeletePortMapping(upnp_urls.controlURL, upnp_data.first.servicetype, port, "UDP", NULL);
 
 	if (status != UPNPCOMMAND_SUCCESS)
@@ -123,4 +116,18 @@ boolean DeletePortMapping(const char *port)
 	return true;
 }
 
-#endif
+boolean CheckPortMapping(void)
+{
+	int status;
+	char intPort[8];
+	char intClient[16];
+
+	if (!upnp_urls.controlURL || upnp_urls.controlURL[0] == '\0')
+		return false;
+
+	status = UPNP_GetSpecificPortMappingEntry(upnp_urls.controlURL, upnp_data.first.servicetype, upnp_portnum, "UDP", NULL, intClient, intPort, NULL, NULL, NULL);
+
+	if (status != UPNPCOMMAND_SUCCESS)
+		return false;
+	return true;
+}

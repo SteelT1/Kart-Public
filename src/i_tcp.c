@@ -238,10 +238,8 @@ static UINT8 bannedmask[MAXBANS];
 static size_t numbans = 0;
 static boolean SOCK_bannednode[MAXNETNODES+1]; /// \note do we really need the +1?
 static boolean init_tcp_driver = false;
-static boolean added_port_mapping = false;
 
 static char port_name[8] = DEFAULTPORT;
-static char portnum[6];
 
 #ifndef NONET
 
@@ -835,7 +833,7 @@ static SOCKET_TYPE UDP_Bind(int family, struct sockaddr *addr, socklen_t addrlen
 	else
 	{
 		current_port = (UINT16)ntohs(sin.sin_port);
-		sprintf(portnum, "%d", current_port);
+		sprintf(upnp_portnum, "%d", current_port);
 	}
 
 	return s;
@@ -1028,16 +1026,6 @@ static boolean UDP_Socket(void)
 #endif
 
 	broadcastaddresses = s;
-
-
-#ifdef HAVE_MINIUPNPC
-	if (UPNP_support)
-	{
-		if (AddPortMapping(NULL, portnum))
-			added_port_mapping = true; // Set this to prevent multiple attempts.
-	}
-#endif
-
 	doomcom->extratics = 1; // internet is very high ping
 
 	return true;
@@ -1196,13 +1184,7 @@ void I_ShutdownTcpDriver(void)
 {
 #ifdef HAVE_MINIUPNPC
 	if (UPNP_support)
-	{
-		if (DeletePortMapping(portnum))
-		{
-			added_port_mapping = false;
-		}
 		ShutdownUPnP();
-	}
 #endif
 #ifndef NONET
 	SOCK_CloseSocket();
@@ -1417,9 +1399,12 @@ boolean I_InitTcpNetwork(void)
 #ifdef HAVE_MINIUPNPC
 	// Enable UPnP support, if possible
 		if (M_CheckParm("-useUPnP"))
-			InitUPnP();
-		else
-			UPNP_support = false;
+		{
+			if (InitUPnP())
+				UPNP_support = true;
+			else
+				CONS_Alert(CONS_ERROR, M_GetText("Failed to initilize UPnP"));
+		}
 #endif
 
 	// parse network game options,

@@ -58,6 +58,10 @@
 #include "sdl12/SRB2XBOX/xboxhelp.h"
 #endif
 
+#ifdef HAVE_MINIUPNPC
+#include "upnp.h"
+#endif
+
 //
 // NETWORKING
 //
@@ -3640,6 +3644,16 @@ boolean SV_SpawnServer(void)
 			I_NetOpenSocket();
 			if (ms_RoomId > 0)
 				RegisterServer();
+
+#ifdef HAVE_MINIUPNPC
+			if (UPNP_support)
+			{
+				if (AddPortMapping(NULL, upnp_portnum))
+					CONS_Alert(CONS_NOTICE, M_GetText("UPNP_AddPortMapping: Added mapping for port - %s, protocol - UDP\n"), upnp_portnum);
+				else
+					CONS_Alert(CONS_ERROR, M_GetText("UPNP_AddPortMapping: Failed to add mapping port - %s, protocol - UDP\n"), upnp_portnum);
+			}
+#endif
 		}
 
 		// non dedicated server just connect to itself
@@ -3674,6 +3688,18 @@ void SV_StopServer(void)
 	maketic = gametic+1;
 	neededtic = maketic;
 	serverrunning = false;
+#ifdef HAVE_MINIUPNPC
+	if (UPNP_support)
+	{
+		if (CheckPortMapping())
+		{
+			if (DeletePortMapping(upnp_portnum))
+				CONS_Alert(CONS_NOTICE, M_GetText("UPNP_DeletePortMapping(): Removed port mapping\n"));
+			else
+				CONS_Alert(CONS_ERROR, M_GetText("UPNP_DeletePortMapping(): Failed to remove port mapping\n"));
+		}
+	}
+#endif
 }
 
 // called at singleplayer start and stopdemo

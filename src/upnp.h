@@ -9,9 +9,8 @@
 /// \file  upnp.h
 /// \brief UPnP initialization code and port mapping routines
 
-#ifdef HAVE_MINIUPNPC
-
 extern boolean UPNP_support;
+extern char upnp_portnum[8];
 
 /**	\brief ShutdownUPnP function
 
@@ -21,9 +20,9 @@ void ShutdownUPnP(void);
 
 /**	\brief InitUPnP function
 
-	\return	none
+	\return	true if successful, false if not
 */
-void InitUPnP(void);
+boolean InitUPnP(void);
 
 /**	\brief AddPortMapping function
 
@@ -37,4 +36,8 @@ boolean AddPortMapping(const char *addr, const char *port);
 */
 boolean DeletePortMapping(const char *port);
 
-#endif
+/**	\brief DeletePortMapping function
+
+	\return	true if successful, false if not
+*/
+boolean CheckPortMapping(void);
