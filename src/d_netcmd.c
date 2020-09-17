@@ -59,6 +59,10 @@
 #include "discord.h"
 #endif
 
+#ifdef HAVE_CURL
+#include "http_dl.h"
+#endif
+
 // ------
 // protos
 // ------

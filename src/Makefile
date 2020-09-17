@@ -417,9 +417,10 @@ OPTS+=-DHAVE_CURL
 CURLCONFIG?=curl-config
 CURL_CFLAGS?=$(shell $(CURLCONFIG) --cflags)
 CURL_LDFLAGS?=$(shell $(CURLCONFIG) --libs)
-
 LIBS+=$(CURL_LDFLAGS)
 CFLAGS+=$(CURL_CFLAGS)
+
+OBJS+=$(OBJDIR)/http_dl.o
 endif
 
 ifdef STATIC

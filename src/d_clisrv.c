@@ -62,6 +62,10 @@
 #include "discord.h"
 #endif
 
+#ifdef HAVE_CURL
+#include "http_dl.h"
+#endif
+
 //
 // NETWORKING
 //
@@ -150,6 +154,11 @@ boolean serverisfull = false; //lets us be aware if the server was full after we
 tic_t firstconnectattempttime = 0;
 
 // engine
+
+#ifdef HAVE_CURL
+curlinfo_t curli[MAX_WADFILES];
+char http_source[HTTP_MAX_URL_LENGTH];
+#endif
 
 // Must be a power of two
 #define TEXTCMD_HASH_SIZE 4
@@ -1123,10 +1132,6 @@ static void GetPackets(void);
 
 static cl_mode_t cl_mode = CL_SEARCHING;
 
-#ifdef HAVE_CURL
-char http_source[MAX_MIRROR_LENGTH];
-#endif
-
 static UINT16 cl_lastcheckedfilecount = 0;	// used for full file list
 
 // Player name send/load
@@ -1301,8 +1306,17 @@ static inline void CL_DrawConnectionStatus(void)
 				strncpy(tempname, filename, sizeof(tempname)-1);
 			}
 
-			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-58-22, V_YELLOWMAP,
-				va(M_GetText("Downloading \"%s\""), tempname));
+			if (curl_active_transfers > 1)
+			{
+				V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-58-22, V_YELLOWMAP,
+					va(M_GetText("Downloading %d files"), curl_active_transfers));
+			}
+			else
+			{
+				V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-58-22, V_YELLOWMAP,
+					va(M_GetText("Downloading \"%s\""), tempname));
+			}
+
 			V_DrawString(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-58, V_20TRANS|V_MONOSPACE,
 				va(" %4uK/%4uK",fileneeded[lastfilenum].currentsize>>10,file->totalsize>>10));
 			V_DrawRightAlignedString(BASEVIDWIDTH/2+128, BASEVIDHEIGHT-58, V_20TRANS|V_MONOSPACE,
@@ -1459,7 +1473,7 @@ CopyCaretColors (char *p, const char *s, int n)
 static void SV_SendServerInfo(INT32 node, tic_t servertime)
 {
 	UINT8 *p;
-	size_t mirror_length;
+	size_t http_url_length;
 	const char *httpurl = cv_httpsource.string;
 
 	netbuffer->packettype = PT_SERVERINFO;
@@ -1496,7 +1510,7 @@ static void SV_SendServerInfo(INT32 node, tic_t servertime)
 		netbuffer->u.serverinfo.iszone = 0;
 
 	memset(netbuffer->u.serverinfo.maptitle, 0, 33);
-	memset(netbuffer->u.serverinfo.httpsource, 0, MAX_MIRROR_LENGTH);
+	memset(netbuffer->u.serverinfo.httpsource, 0, HTTP_MAX_URL_LENGTH);
 
 	if (!(mapheaderinfo[gamemap-1]->menuflags & LF2_HIDEINMENU) && mapheaderinfo[gamemap-1]->lvlttl[0])
 	{
@@ -1548,15 +1562,15 @@ static void SV_SendServerInfo(INT32 node, tic_t servertime)
 
 	netbuffer->u.serverinfo.actnum = 0; //mapheaderinfo[gamemap-1]->actnum
 
-	mirror_length = strlen(httpurl);
-	if (mirror_length > MAX_MIRROR_LENGTH)
-		mirror_length = MAX_MIRROR_LENGTH;
+	http_url_length = strlen(httpurl);
+	if (http_url_length > HTTP_MAX_URL_LENGTH)
+		http_url_length = HTTP_MAX_URL_LENGTH;
 
-	if (snprintf(netbuffer->u.serverinfo.httpsource, mirror_length+1, "%s", httpurl) < 0)
+	if (snprintf(netbuffer->u.serverinfo.httpsource, http_url_length+1, "%s", httpurl) < 0)
 		// If there's an encoding error, send nothing, we accept that the above may be truncated
-		strncpy(netbuffer->u.serverinfo.httpsource, "", mirror_length);
+		strncpy(netbuffer->u.serverinfo.httpsource, "", http_url_length);
 
-	netbuffer->u.serverinfo.httpsource[MAX_MIRROR_LENGTH-1] = '\0';
+	netbuffer->u.serverinfo.httpsource[HTTP_MAX_URL_LENGTH-1] = '\0';
 
 	p = PutFileNeeded(0);
 
@@ -2037,7 +2051,7 @@ static void M_ConfirmConnect(event_t *ev)
 			if (totalfilesrequestednum > 0)
 			{
 #ifdef HAVE_CURL
-				if (http_source[0] == '\0' || curl_failedwebdownload)
+				if (http_source[0] == '\0' || curl_faileddownload)
 #endif
 				{
 					if (CL_SendRequestFile())
@@ -2125,7 +2139,7 @@ static boolean CL_FinishedFileList(void)
 		// must download something
 		// can we, though?
 #ifdef HAVE_CURL
-		if (http_source[0] == '\0' || curl_failedwebdownload)
+		if (http_source[0] == '\0' || curl_faileddownload)
 #endif
 		{
 			if (!CL_CheckDownloadable()) // nope!
@@ -2147,7 +2161,7 @@ static boolean CL_FinishedFileList(void)
 		}
 
 #ifdef HAVE_CURL
-		if (!curl_failedwebdownload)
+		if (!curl_faileddownload)
 #endif
 		{
 #ifndef NONET
@@ -2245,7 +2259,7 @@ static boolean CL_ServerConnectionSearchTicker(tic_t *asksent)
 		{
 #ifdef HAVE_CURL
 			if (serverlist[i].info.httpsource[0])
-				strncpy(http_source, serverlist[i].info.httpsource, MAX_MIRROR_LENGTH);
+				strncpy(http_source, serverlist[i].info.httpsource, HTTP_MAX_URL_LENGTH);
 			else
 				http_source[0] = '\0';
 #else
@@ -2333,40 +2347,58 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 			if (http_source[0])
 			{
 				for (i = 0; i < fileneedednum; i++)
+				{
 					if (fileneeded[i].status == FS_NOTFOUND || fileneeded[i].status == FS_MD5SUMBAD)
 					{
-						curl_transfers++;
+						curli[i].url[0] = '\0';
+						curli[i].starttime = 0;
+						curli[i].handle = NULL;
+						curli[i].filename[0] = '\0';
+						curli[i].fileinfo = &fileneeded[i];
+						curl_total_transfers++;
 					}
-				
+				}
+
 				cl_mode = CL_DOWNLOADHTTPFILES;
 			}
 			break;
 
 		case CL_DOWNLOADHTTPFILES:
-			waitmore = false;
-			for (i = 0; i < fileneedednum; i++)
+			waitmore = false; 
+
+			CURL_DownloadFiles();
+
+			for (i = 0; i < fileneedednum; i++) 
+			{
 				if (fileneeded[i].status == FS_NOTFOUND || fileneeded[i].status == FS_MD5SUMBAD)
 				{
-					if (!curl_running)
-						CURLPrepareFile(http_source, i);
-					waitmore = true;
-					break;
+					if (!curli[i].handle)
+					{
+						if (curl_active_transfers < 1)
+						{
+							CURL_AddTransfer(&curli[i], http_source, i);
+							curl_active_transfers++;
+						}
+						waitmore = true;
+						break;
+					}
 				}
-
-			if (curl_running)
-				CURLGetFile();
+				
+				if (curli[i].handle && curli[i].fileinfo->status == FS_DOWNLOADING)
+					CURL_CheckDownloads(&curli[i]);				
+			}
 
 			if (waitmore)
 				break; // exit the case
 
-			if (curl_failedwebdownload && !curl_transfers)
+			if (curl_faileddownload && !curl_total_transfers)
 			{
-				CONS_Printf("One or more files failed to download, falling back to internal downloader\n");
+				CONS_Printf("One or more files failed to download, attempting to download using internal downloader\n");
 				cl_mode = CL_CHECKFILES;
 				break;
 			}
 
-			if (!curl_transfers)
+			if (!curl_total_transfers)
 				cl_mode = CL_LOADFILES;
 
 			break;
@@ -3005,10 +3037,12 @@ void CL_Reset(void)
 	connectiontimeout = (tic_t)cv_nettimeout.value; //reset this temporary hack
 
 #ifdef HAVE_CURL
-	curl_failedwebdownload = false;
-	curl_transfers = 0;
-	curl_running = false;
+	CURL_Cleanup(curli);
+	curl_active_transfers = 0;
+	curl_total_transfers = 0;
+	curl_faileddownload = false;
 	http_source[0] = '\0';
+	memset(curli, 0, sizeof(curli));
 #endif
 
 	// D_StartTitle should get done now, but the calling function will handle it

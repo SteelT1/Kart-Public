@@ -366,7 +366,7 @@ typedef struct
 
 #define MAXSERVERNAME 32
 #define MAXFILENEEDED 915
-#define MAX_MIRROR_LENGTH 256
+#define HTTP_MAX_URL_LENGTH 256
 // This packet is too large
 typedef struct
 {
@@ -395,7 +395,7 @@ typedef struct
 	unsigned char mapmd5[16];
 	UINT8 actnum;
 	UINT8 iszone;
-	char httpsource[MAX_MIRROR_LENGTH]; // HTTP URL to download from, always defined for compatibility
+	char httpsource[HTTP_MAX_URL_LENGTH]; // HTTP URL to download from, always defined for compatibility
 	UINT8 fileneeded[MAXFILENEEDED]; // is filled with writexxx (byteptr.h)
 } ATTRPACK serverinfo_pak;
 
