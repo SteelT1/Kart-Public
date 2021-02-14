@@ -15,14 +15,15 @@
 #include "d_netfil.h"
 #include "d_net.h"
 #include "i_system.h"
+#include "i_threads.h"
 #include "http_dl.h"
 
-static int running_handles = 0;
-static CURLM *multi_handle; // The multi handle used to keep track of all ongoing transfers
-SINT8 curl_initstatus = 0;
-UINT32 curl_active_transfers = 0; // Number of currently ongoing transfers
-UINT32 curl_total_transfers = 0; // Number of total tranfeers
-boolean curl_faileddownload = false; // Did a download fail?
+CURLSH *curlshare; // Handle for sharing a single connection pool
+UINT32 httpdl_active_transfers = 0; // Number of currently ongoing transfers
+UINT32 httpdl_total_transfers = 0; // Number of total tranfeers
+boolean httpdl_wasinit = false;
+boolean httpdl_faileddownload = false; // Did a download fail?
+static I_mutex httpdl_mutex;
 
 static void ChangeFileExtension(char* filename, char* newExtension)
 {
@@ -31,33 +32,33 @@ static void ChangeFileExtension(char* filename, char* newExtension)
     strlcpy(lastSlash, newExtension, strlen(lastSlash));
 }
 
-static size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream)
+static size_t write_cb(void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
     size_t written;
     written = fwrite(ptr, size, nmemb, stream);
     return written;
 }
 
-static int progress_callback(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow)
+static int progress_cb(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow)
 {
 	curlinfo_t ci;
 	// Function prototype requires these but we won't use, so just discard
 	(void)ultotal;
-	(void)ulnow; 
+	(void)ulnow;
 	ci = *(curlinfo_t *)clientp;
 	ci.fileinfo->currentsize = (UINT32)dlnow;
 	ci.fileinfo->totalsize = (UINT32)dltotal;
-	getbytes = dlnow / (time(NULL) - ci.starttime);
+	//getbytes = dlnow / (time(NULL) - ci.starttime);
 	return 0;
 }
 
 static void set_common_opts(curlinfo_t *ti)
 {
-	curl_easy_setopt(ti->handle, CURLOPT_WRITEFUNCTION, write_data);
+	curl_easy_setopt(ti->handle, CURLOPT_WRITEFUNCTION, write_cb);
 	curl_easy_setopt(ti->handle, CURLOPT_NOPROGRESS, 0L);
-	curl_easy_setopt(ti->handle, CURLOPT_PROGRESSFUNCTION, progress_callback);
+	curl_easy_setopt(ti->handle, CURLOPT_PROGRESSFUNCTION, progress_cb);
 	curl_easy_setopt(ti->handle, CURLOPT_PROGRESSDATA, ti);
-	
+
 	// Only allow HTTP and HTTPS
 	curl_easy_setopt(ti->handle, CURLOPT_PROTOCOLS, CURLPROTO_HTTP|CURLPROTO_HTTPS);
 	curl_easy_setopt(ti->handle, CURLOPT_USERAGENT, va("SRB2Kart/v%d.%d", VERSION, SUBVERSION)); // Set user agent as some servers won't accept invalid user agents.
@@ -70,141 +71,124 @@ static void set_common_opts(curlinfo_t *ti)
 	// abort if slower than 30 bytes/sec during 60 seconds
 	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_TIME, 60L);
 	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_LIMIT, 30L);
+	curl_easy_setopt(ti->share, CURLOPT_SHARE, curlshare);
 }
 
-void CURL_Cleanup(curlinfo_t *curlc)
+static void cleanup_transfer(curlinfo_t *ti)
 {
-	UINT32 i;
-
-	if (curl_initstatus == 1)
-    {
-    	for (i = 0; i < curl_total_transfers; i++)
-    	{
-    		if (curlc[i].handle != NULL)
-    		{
-	    		curl_multi_remove_handle(multi_handle, curlc[i].handle);
-				curl_easy_cleanup(curlc[i].handle);
-    		}
-    	}
-
-		curl_multi_cleanup(multi_handle);
-		curl_global_cleanup();
-    	curl_initstatus = 0;
-    }
+	httpdl_active_transfers--;
+	httpdl_total_transfers--;
+	curl_easy_cleanup(ti->handle);
 }
 
-boolean CURL_AddTransfer(curlinfo_t *curl, const char* url, int filenum)
+static void download_file_thread(curlinfo_t *transfer)
 {
+	CURLcode cc;
+	char errbuf[256];
+
+	curl_easy_setopt(transfer->handle, CURLOPT_ERRORBUFFER, errbuf);
+	cc = curl_easy_perform(transfer->handle);
+
+	if (cc != CURLE_OK)
+	{
+		transfer->fileinfo->status = FS_FALLBACK;
+		fclose(transfer->fileinfo->file);
+		remove(transfer->fileinfo->filename);
+		CONS_Printf(M_GetText("Failed to download %s (%s)\n"), transfer->filename, errbuf);
+		httpdl_faileddownload = true;
+	}
+	else
+	{
+		CONS_Printf(M_GetText("Thread %d: finished downloading %s\n"), transfer->id, transfer->filename);
+		downloadcompletednum++;
+		transfer->fileinfo->status = FS_FOUND;
+		fclose(transfer->fileinfo->file);
+	}
+	cleanup_transfer(transfer);
+}
+
+static void lock_cb(CURL *handle, curl_lock_data data, curl_lock_access access, void *userptr)
+{
+  (void)access; /* unused */
+  (void)userptr; /* unused */
+  (void)handle; /* unused */
+  (void)data; /* unused */
+  I_lock_mutex(&httpdl_mutex);
+}
+
+static void unlock_cb(CURL *handle, curl_lock_data data, void *userptr)
+{
+  (void)userptr; /* unused */
+  (void)handle;  /* unused */
+  (void)data;    /* unused */
+  I_unlock_mutex(&httpdl_mutex);
+}
+
+/*
+ Initialize a new curl session,
+ returns true if successful, false if not.
+*/
+boolean HTTPDL_Init(void)
+{
+	if (!httpdl_wasinit)
+	{
+		if (!curl_global_init(CURL_GLOBAL_ALL))
+		{
+			curlshare = curl_share_init();
+			if (curlshare)
+			{
+				curl_share_setopt(curlshare, CURLSHOPT_LOCKFUNC, lock_cb);
+	  			curl_share_setopt(curlshare, CURLSHOPT_UNLOCKFUNC, unlock_cb);
+	  			curl_share_setopt(curlshare, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+	  			httpdl_wasinit = true;
+	  			CONS_Printf("http dl init\n");
+	  			return true;
+			}
+		}
+	}
+	CONS_Printf("http dl init failed\n");
+	return false;
+}
+
+// Cleans up the share handle and all of the resources used by this curl session.
+void HTTPDL_Quit(void)
+{
+	if (!httpdl_wasinit)
+		return;
+
+	curl_share_cleanup(curlshare);
+ 	curl_global_cleanup();
+ 	httpdl_wasinit = false;
+}
+
+boolean HTTPDL_AddTransfer(curlinfo_t *download, const char* url, int filenum)
+{
+	static char transfername[64];
 #ifdef PARANOIA
 	if (M_CheckParm("-nodownload"))
 		I_Error("Attempted to download files in -nodownload mode");
 #endif
 
-	if (curl_initstatus == 0)
-	{
-		curl_global_init(CURL_GLOBAL_ALL);
-		multi_handle = curl_multi_init();
-		
-		if (multi_handle)
-		{
-			// only keep 10 connections in the cache
-			curl_multi_setopt(multi_handle, CURLMOPT_MAXCONNECTS, 10L);
-			curl_initstatus = 1;
-		}
-	}
+	download->handle = curl_easy_init();
 
-	if (curl_initstatus == 1)
-	{
-		curl->handle = curl_easy_init();
+	set_common_opts(download);
+	I_mkdir(downloaddir, 0755);
 
-		if (curl->handle)
-		{
-			set_common_opts(curl);
+	strlcpy(download->filename, download->fileinfo->filename, sizeof(download->filename));
+	snprintf(download->url, sizeof(download->url), "%s/%s", url, download->filename);
 
-			I_mkdir(downloaddir, 0755);
+	curl_easy_setopt(download->handle, CURLOPT_URL, download->url);
+	curl_easy_setopt(download->handle, CURLOPT_SHARE, download->share);
 
-			strlcpy(curl->filename, curl->fileinfo->filename, sizeof(curl->filename));
-			snprintf(curl->url, sizeof(curl->url), "%s/%s", url, curl->filename);
+	strcatbf(download->fileinfo->filename, downloaddir, "/");
+	download->fileinfo->file = fopen(download->fileinfo->filename, "wb");
 
-			curl_easy_setopt(curl->handle, CURLOPT_URL, curl->url);
+	curl_easy_setopt(download->handle, CURLOPT_WRITEDATA, download->fileinfo->file);
 
-			strcatbf(curl->fileinfo->filename, downloaddir, "/");
-			curl->fileinfo->file = fopen(curl->fileinfo->filename, "wb");
-			curl_easy_setopt(curl->handle, CURLOPT_WRITEDATA, curl->fileinfo->file);
-		
-			CONS_Printf(M_GetText("[File]: %s [URL]: %s - added to download queue\n"), curl->filename, curl->url);
-			curl_multi_add_handle(multi_handle, curl->handle);
-			curl->starttime = time(NULL);
-			curl->fileinfo->status = FS_DOWNLOADING;
-			lastfilenum = filenum;
-			return true;
-		}
-	}
-	curl_faileddownload = true;
-	return false;
-}
-
-void CURL_DownloadFiles(void)
-{
-	int numfds;
-
-    if (multi_handle)
-    {
-    	curl_multi_perform(multi_handle, &running_handles);
-
-    	if (running_handles)
-      	{
-      		// wait for activity, timeout or "nothing" 
-			curl_multi_wait(multi_handle, NULL, 0, 1000, &numfds);
-      	}
-    }
-}
-
-static void cleanup_transfer(curlinfo_t *ti)
-{
-	curl_active_transfers--;
-	curl_total_transfers--;
-	curl_multi_remove_handle(multi_handle, ti->handle);
-	curl_easy_cleanup(ti->handle);
-}
-
-void CURL_CheckDownloads(curlinfo_t *ti)
-{
-	CURLMsg *m; // for picking up messages with the transfer status
-	long response_code = 0;
-	const char *easy_handle_error;
-	CURLcode easyres; // Result from easy handle for transfer
-	int msg_left;
-
-	// See how the downloads went
-	while ((m = curl_multi_info_read(multi_handle, &msg_left)))
-	{
-		if (m && (m->msg == CURLMSG_DONE))
-		{
-			easyres = m->data.result;
-			if (easyres != CURLE_OK)
-			{
-				if (easyres == CURLE_HTTP_RETURNED_ERROR)
-					curl_easy_getinfo(ti->handle, CURLINFO_RESPONSE_CODE, &response_code);
-
-				easy_handle_error = (response_code) ? va("HTTP reponse code %ld", response_code) : curl_easy_strerror(easyres);
-				ti->fileinfo->status = FS_FALLBACK;
-				fclose(ti->fileinfo->file);
-				remove(ti->fileinfo->filename);
-				CONS_Printf(M_GetText("Failed to download %s (%s)\n"), ti->filename, easy_handle_error);
-				curl_faileddownload = true;
-			}
-			else
-			{
-				CONS_Printf(M_GetText("Finished downloading %s\n"), ti->filename);
-				downloadcompletednum++;
-				ti->fileinfo->status = FS_FOUND;
-				fclose(ti->fileinfo->file);
-			}
-
-			cleanup_transfer(ti);
-			if (!curl_total_transfers)
-				break;
-		}
-	}
+	//download->starttime = time(NULL);
+	download->fileinfo->status = FS_DOWNLOADING;
+	lastfilenum = filenum;
+	snprintf(transfername, sizeof(transfername), "file-%s", download->filename);
+	I_spawn_thread(transfername, (I_thread_fn)download_file_thread, download);
+	return true;
 }

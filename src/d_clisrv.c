@@ -156,7 +156,7 @@ tic_t firstconnectattempttime = 0;
 // engine
 
 #ifdef HAVE_CURL
-curlinfo_t curli[MAX_WADFILES];
+curlinfo_t curl[MAX_WADFILES];
 char http_source[HTTP_MAX_URL_LENGTH];
 #endif
 
@@ -1233,7 +1233,7 @@ static inline void CL_DrawConnectionStatus(void)
 					cltext = M_GetText("Server full, waiting for a slot...");
 				else
 					cltext = M_GetText("Requesting to join...");
-					
+
 				break;
 #ifdef HAVE_CURL
 			case CL_PREPAREHTTPFILES:
@@ -1306,10 +1306,10 @@ static inline void CL_DrawConnectionStatus(void)
 				strncpy(tempname, filename, sizeof(tempname)-1);
 			}
 
-			if (curl_active_transfers > 1)
+			if (httpdl_active_transfers > 1)
 			{
 				V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-58-22, V_YELLOWMAP,
-					va(M_GetText("Downloading %d files"), curl_active_transfers));
+					va(M_GetText("Downloading %d files"), httpdl_active_transfers));
 			}
 			else
 			{
@@ -2043,7 +2043,7 @@ void CL_QueryServerList (msg_server_t *server_list)
 
 static void M_ConfirmConnect(event_t *ev)
 {
-#ifndef NONET	
+#ifndef NONET
 	if (ev->type == ev_keydown)
 	{
 		if (ev->data1 == ' ' || ev->data1 == 'y' || ev->data1 == KEY_ENTER || ev->data1 == gamecontrol[gc_accelerate][0] || ev->data1 == gamecontrol[gc_accelerate][1])
@@ -2051,7 +2051,7 @@ static void M_ConfirmConnect(event_t *ev)
 			if (totalfilesrequestednum > 0)
 			{
 #ifdef HAVE_CURL
-				if (http_source[0] == '\0' || curl_faileddownload)
+				if (http_source[0] == '\0' || httpdl_faileddownload)
 #endif
 				{
 					if (CL_SendRequestFile())
@@ -2066,7 +2066,7 @@ static void M_ConfirmConnect(event_t *ev)
 			}
 			else
 				cl_mode = CL_LOADFILES;
-			
+
 			M_ClearMenus(true);
 		}
 		else if (ev->data1 == 'n' || ev->data1 == KEY_ESCAPE|| ev->data1 == gamecontrol[gc_brake][0] || ev->data1 == gamecontrol[gc_brake][1])
@@ -2139,7 +2139,7 @@ static boolean CL_FinishedFileList(void)
 		// must download something
 		// can we, though?
 #ifdef HAVE_CURL
-		if (http_source[0] == '\0' || curl_faileddownload)
+		if (http_source[0] == '\0' || httpdl_faileddownload)
 #endif
 		{
 			if (!CL_CheckDownloadable()) // nope!
@@ -2161,7 +2161,7 @@ static boolean CL_FinishedFileList(void)
 		}
 
 #ifdef HAVE_CURL
-		if (!curl_faileddownload)
+		if (!httpdl_faileddownload)
 #endif
 		{
 #ifndef NONET
@@ -2314,7 +2314,7 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 {
 	boolean waitmore;
 	INT32 i;
-	
+
 #ifdef NONET
 	(void)tmpsave;
 #endif
@@ -2346,59 +2346,57 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 		case CL_PREPAREHTTPFILES:
 			if (http_source[0])
 			{
-				for (i = 0; i < fileneedednum; i++)
+				if (HTTPDL_Init())
 				{
-					if (fileneeded[i].status == FS_NOTFOUND || fileneeded[i].status == FS_MD5SUMBAD)
+					for (i = 0; i < fileneedednum; i++)
 					{
-						curli[i].url[0] = '\0';
-						curli[i].starttime = 0;
-						curli[i].handle = NULL;
-						curli[i].filename[0] = '\0';
-						curli[i].fileinfo = &fileneeded[i];
-						curl_total_transfers++;
+						if (fileneeded[i].status == FS_NOTFOUND || fileneeded[i].status == FS_MD5SUMBAD)
+						{
+							curl[i].url[0] = '\0';
+							//curli[i].starttime = 0;
+							curl[i].handle = curl[i].share = NULL;
+							curl[i].filename[0] = '\0';
+							curl[i].fileinfo = &fileneeded[i];
+							curl[i].id = i;
+							httpdl_total_transfers++;
+						}
 					}
-				}
 
-				cl_mode = CL_DOWNLOADHTTPFILES;
+					cl_mode = CL_DOWNLOADHTTPFILES;
+				}
+				else
+					cl_mode = CL_CHECKFILES;
 			}
 			break;
 
 		case CL_DOWNLOADHTTPFILES:
-			waitmore = false; 
+			waitmore = false;
 
-			CURL_DownloadFiles();
-
-			for (i = 0; i < fileneedednum; i++) 
+			for (i = 0; i < fileneedednum; i++)
 			{
 				if (fileneeded[i].status == FS_NOTFOUND || fileneeded[i].status == FS_MD5SUMBAD)
 				{
-					if (!curli[i].handle)
+					if (httpdl_active_transfers < 4)
 					{
-						if (curl_active_transfers < 1)
-						{
-							CURL_AddTransfer(&curli[i], http_source, i);
-							curl_active_transfers++;
-						}
-						waitmore = true;
-						break;
+						HTTPDL_AddTransfer(&curl[i], http_source, i);
+						httpdl_active_transfers++;
 					}
+					waitmore = true;
+					break;
 				}
-				
-				if (curli[i].handle && curli[i].fileinfo->status == FS_DOWNLOADING)
-					CURL_CheckDownloads(&curli[i]);				
 			}
 
 			if (waitmore)
 				break; // exit the case
 
-			if (curl_faileddownload && !curl_total_transfers)
+			if (httpdl_faileddownload && !httpdl_total_transfers)
 			{
 				CONS_Printf("One or more files failed to download, attempting to download using internal downloader\n");
 				cl_mode = CL_CHECKFILES;
 				break;
 			}
 
-			if (!curl_total_transfers)
+			if (!httpdl_total_transfers)
 				cl_mode = CL_LOADFILES;
 
 			break;
@@ -2420,6 +2418,8 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 		case CL_LOADFILES:
 			if (CL_LoadServerFiles())
 			{
+				HTTPDL_Quit();
+
 				*asksent = 0; //This ensure the first join ask is right away
 				firstconnectattempttime = I_GetTime();
 				cl_mode = CL_ASKJOIN;
@@ -3037,12 +3037,12 @@ void CL_Reset(void)
 	connectiontimeout = (tic_t)cv_nettimeout.value; //reset this temporary hack
 
 #ifdef HAVE_CURL
-	CURL_Cleanup(curli);
-	curl_active_transfers = 0;
-	curl_total_transfers = 0;
-	curl_faileddownload = false;
+	httpdl_active_transfers = 0;
+	httpdl_total_transfers = 0;
+	httpdl_faileddownload = false;
 	http_source[0] = '\0';
-	memset(curli, 0, sizeof(curli));
+	HTTPDL_Quit();
+	memset(curl, 0, sizeof(curl));
 #endif
 
 	// D_StartTitle should get done now, but the calling function will handle it
@@ -5256,7 +5256,7 @@ static void CL_SendClientKeepAlive(void)
 static void SV_SendServerKeepAlive(void)
 {
 	INT32 n;
-	
+
 	for (n = 1; n < MAXNETNODES; n++)
 	{
 		if (nodeingame[n])
@@ -5803,7 +5803,7 @@ FILESTAMP
 	{
 		SV_SendServerKeepAlive();
 	}
-	
+
 	// No else because no tics are being run and we can't resynch during this
 
 	Net_AckTicker();
