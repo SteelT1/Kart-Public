@@ -20,26 +20,39 @@
 // Information of a curl transfer (one for each transfer)
 typedef struct curlinfo_s
 {
-	char url[HTTP_MAX_URL_LENGTH]; // The url for this transfer
-	//time_t starttime; // The time when this transfer was started
 	CURL *handle; // The easy handle for this transfer
 	CURLSH *share; // Copy of the share handle
 	char filename[MAX_WADPATH]; // Name of the file
-	fileneeded_t *fileinfo; // The fileneeded_t for this transfer
-	UINT32 id; // the id of the transafrr
+	char url[HTTP_MAX_URL_LENGTH]; // The url for this transfer
+	//time_t starttime; // The time when this transfer was started
+	FILE *file;
+	INT32 num; // the id of the transfer
+	boolean active;
 } curlinfo_t;
+
+typedef struct HTTP_login HTTP_login;
+
+extern struct HTTP_login
+{
+	char       * url;
+	char       * auth;
+	HTTP_login * next;
+}
+*httpdl_logins;
 
 extern CURLSH *curlshare; // Handle for sharing a single connection pool
 extern UINT32 httpdl_active_transfers; // Number of currently ongoing transfers
 extern UINT32 httpdl_total_transfers; // Number of total tranfeers
 extern boolean httpdl_faileddownload; // Did a download fail?
 extern boolean httpdl_wasinit;
+extern boolean httpdl_inprogresss; // Is a transfer in progress?
 extern curlinfo_t curl[MAX_WADFILES];
 //extern SINT8 curl_initstatus;
 extern char http_source[HTTP_MAX_URL_LENGTH];
 
 boolean HTTPDL_Init(void);
 void HTTPDL_Quit(void);
+HTTP_login * HTTPDL_GetLogin (const char *url, HTTP_login ***return_prev_next);
 boolean HTTPDL_AddTransfer(curlinfo_t *curl, const char* url, int filenum);
 
 #endif // _HTTPDL_H_

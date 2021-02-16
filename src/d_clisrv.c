@@ -2356,12 +2356,12 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 							//curli[i].starttime = 0;
 							curl[i].handle = curl[i].share = NULL;
 							curl[i].filename[0] = '\0';
-							curl[i].fileinfo = &fileneeded[i];
-							curl[i].id = i;
+							curl[i].file = NULL;
+							curl[i].num = i;
+							curl[i].active = false;
 							httpdl_total_transfers++;
 						}
 					}
-
 					cl_mode = CL_DOWNLOADHTTPFILES;
 				}
 				else
@@ -3041,7 +3041,6 @@ void CL_Reset(void)
 	httpdl_total_transfers = 0;
 	httpdl_faileddownload = false;
 	http_source[0] = '\0';
-	HTTPDL_Quit();
 	memset(curl, 0, sizeof(curl));
 #endif
 
@@ -3526,7 +3525,7 @@ static void Command_set_http_login (void)
 		return;
 	}
 
-	login = CURLGetLogin(COM_Argv(1), &prev_next);
+	login = HTTPDL_GetLogin(COM_Argv(1), &prev_next);
 
 	if (COM_Argc() == 2)
 	{
@@ -3549,8 +3548,8 @@ static void Command_set_http_login (void)
 
 		login->auth = Z_StrDup(COM_Argv(2));
 
-		login->next = curl_logins;
-		curl_logins = login;
+		login->next = httpdl_logins;
+		httpdl_logins = login;
 	}
 }
 
@@ -3563,7 +3562,7 @@ static void Command_list_http_logins (void)
 	HTTP_login *login;
 
 	for (
-			login = curl_logins;
+			login = httpdl_logins;
 			login;
 			login = login->next
 	){
