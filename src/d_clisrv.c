@@ -2355,6 +2355,7 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 						curli[i].handle = NULL;
 						curli[i].filename[0] = '\0';
 						curli[i].fileinfo = &fileneeded[i];
+						curli[i].error_buffer[0] = '\0'; 
 						curl_total_transfers++;
 					}
 				}

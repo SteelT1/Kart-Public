@@ -25,6 +25,7 @@ typedef struct curlinfo_s
 	CURL *handle; // The easy handle for this transfer 
 	char filename[MAX_WADPATH]; // Name of the file
 	fileneeded_t *fileinfo; // The fileneeded_t for this transfer
+	char error_buffer[CURL_ERROR_SIZE]; // Buffer to store error messages.
 } curlinfo_t;
 
 typedef struct HTTP_login HTTP_login;

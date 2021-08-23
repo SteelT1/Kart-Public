@@ -33,14 +33,20 @@ static void ChangeFileExtension(char* filename, char* newExtension)
     strlcpy(lastSlash, newExtension, strlen(lastSlash));
 }
 
-static size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream)
+/* Callback function to write received data to file 
+ * Required because on win32 not setting can cause crashes if CURLOPT_WRITEFUNCTION isn't set but CURLOPT_WRITEDATA is
+ * And there's no way avoiding that
+ * See: https://curl.se/libcurl/c/CURLOPT_WRITEDATA.html */
+static size_t write_data_cb(void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
     size_t written;
     written = fwrite(ptr, size, nmemb, stream);
     return written;
 }
 
-static int progress_callback(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow)
+/* Callback function to show progress information
+ * Used to update the download screen progress */
+static int progress_cb(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow)
 {
 	curlinfo_t ci;
 	// Function prototype requires these but we won't use, so just discard
@@ -55,9 +61,9 @@ static int progress_callback(void *clientp, double dltotal, double dlnow, double
 
 static void set_common_opts(curlinfo_t *ti)
 {
-	curl_easy_setopt(ti->handle, CURLOPT_WRITEFUNCTION, write_data);
+	curl_easy_setopt(ti->handle, CURLOPT_WRITEFUNCTION, write_data_cb);
 	curl_easy_setopt(ti->handle, CURLOPT_NOPROGRESS, 0L);
-	curl_easy_setopt(ti->handle, CURLOPT_PROGRESSFUNCTION, progress_callback);
+	curl_easy_setopt(ti->handle, CURLOPT_PROGRESSFUNCTION, progress_cb);
 	curl_easy_setopt(ti->handle, CURLOPT_PROGRESSDATA, ti);
 	
 	// Only allow HTTP and HTTPS
@@ -72,6 +78,9 @@ static void set_common_opts(curlinfo_t *ti)
 	// abort if slower than 1 bytes/sec during 10 seconds
 	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_TIME, 1L);
 	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_LIMIT, 10L);
+	
+	// provide a buffer to store errors in //
+	curl_easy_setopt(ti->handle, CURLOPT_ERRORBUFFER, ti->error_buffer);
 }
 
 void CURL_Cleanup(curlinfo_t *curlc)
@@ -183,10 +192,9 @@ static void cleanup_transfer(curlinfo_t *ti)
 void CURL_CheckDownloads(curlinfo_t *ti)
 {
 	CURLMsg *m; // for picking up messages with the transfer status
-	long response_code = 0;
-	const char *easy_handle_error;
 	CURLcode easyres; // Result from easy handle for transfer
 	int msg_left;
+	int easy_err_msg_len;
 
 	// See how the downloads went
 	while ((m = curl_multi_info_read(multi_handle, &msg_left)))
@@ -196,14 +204,16 @@ void CURL_CheckDownloads(curlinfo_t *ti)
 			easyres = m->data.result;
 			if (easyres != CURLE_OK)
 			{
-				if (easyres == CURLE_HTTP_RETURNED_ERROR)
-					curl_easy_getinfo(ti->handle, CURLINFO_RESPONSE_CODE, &response_code);
-
-				easy_handle_error = (response_code) ? va("HTTP reponse code %ld", response_code) : curl_easy_strerror(easyres);
+				if (ti->error_buffer[0] == '\0')
+				{
+					easy_err_msg_len = strlen(curl_easy_strerror(easyres));
+					strlcpy(ti->error_buffer, curl_easy_strerror(easyres), easy_err_msg_len);
+				}
+				
 				ti->fileinfo->status = FS_FALLBACK;
 				fclose(ti->fileinfo->file);
 				remove(ti->fileinfo->filename);
-				CONS_Alert(CONS_ERROR, M_GetText("Failed to download %s (%s)\n"), ti->filename, easy_handle_error);
+				CONS_Alert(CONS_ERROR, M_GetText("Failed to download %s (%s)\n"), ti->filename, ti->error_buffer);
 				curl_faileddownload = true;
 			}
 			else
