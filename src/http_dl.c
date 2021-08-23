@@ -224,6 +224,7 @@ void CURL_CheckDownloads(curlinfo_t *ti)
 			{
 				CONS_Printf(M_GetText("Finished downloading %s\n"), ti->filename);
 				downloadcompletednum++;
+				downloadcompletedsize += ti->fileinfo->totalsize;
 				ti->fileinfo->status = FS_FOUND;
 				fclose(ti->fileinfo->file);
 			}
