@@ -10,6 +10,7 @@
 
 #include <curl/curl.h>
 #include <time.h>
+#include "doomdef.h"
 #include "m_argv.h"
 #include "m_misc.h"
 #include "d_netfil.h"
@@ -23,6 +24,7 @@ SINT8 curl_initstatus = 0;
 UINT32 curl_active_transfers = 0; // Number of currently ongoing transfers
 UINT32 curl_total_transfers = 0; // Number of total tranfeers
 boolean curl_faileddownload = false; // Did a download fail?
+HTTP_login *curl_logins;
 
 static void ChangeFileExtension(char* filename, char* newExtension)
 {
@@ -95,6 +97,7 @@ void CURL_Cleanup(curlinfo_t *curlc)
 
 boolean CURL_AddTransfer(curlinfo_t *curl, const char* url, int filenum)
 {
+	HTTP_login *login;	
 #ifdef PARANOIA
 	if (M_CheckParm("-nodownload"))
 		I_Error("Attempted to download files in -nodownload mode");
@@ -127,6 +130,14 @@ boolean CURL_AddTransfer(curlinfo_t *curl, const char* url, int filenum)
 			snprintf(curl->url, sizeof(curl->url), "%s/%s", url, curl->filename);
 
 			curl_easy_setopt(curl->handle, CURLOPT_URL, curl->url);
+			
+			// Authenticate if the user so wishes
+			login = CURLGetLogin(url, NULL);
+
+			if (login)
+			{
+				curl_easy_setopt(curl->handle, CURLOPT_USERPWD, login->auth);
+			}			
 
 			strcatbf(curl->fileinfo->filename, downloaddir, "/");
 			curl->fileinfo->file = fopen(curl->fileinfo->filename, "wb");
@@ -207,4 +218,27 @@ void CURL_CheckDownloads(curlinfo_t *ti)
 				break;
 		}
 	}
+}
+
+HTTP_login *
+CURLGetLogin (const char *url, HTTP_login ***return_prev_next)
+{
+	HTTP_login  * login;
+	HTTP_login ** prev_next;
+
+	for (
+			prev_next = &curl_logins;
+			( login = (*prev_next));
+			prev_next = &login->next
+	){
+		if (strcmp(login->url, url) == 0)
+		{
+			if (return_prev_next)
+				(*return_prev_next) = prev_next;
+
+			return login;
+		}
+	}
+
+	return NULL;
 }

@@ -27,6 +27,16 @@ typedef struct curlinfo_s
 	fileneeded_t *fileinfo; // The fileneeded_t for this transfer
 } curlinfo_t;
 
+typedef struct HTTP_login HTTP_login;
+
+extern struct HTTP_login
+{
+	char       * url;
+	char       * auth;
+	HTTP_login * next;
+}
+*curl_logins;
+
 extern UINT32 curl_active_transfers; // Number of currently ongoing transfers
 extern UINT32 curl_total_transfers; // Number of total tranfeers
 extern boolean curl_faileddownload; // Did a download fail?
@@ -38,5 +48,6 @@ void CURL_Cleanup(curlinfo_t *curl);
 boolean CURL_AddTransfer(curlinfo_t *curl, const char* url, int filenum);
 void CURL_DownloadFiles(void);
 extern void CURL_CheckDownloads(curlinfo_t *ti);
+HTTP_login * CURLGetLogin (const char *url, HTTP_login ***return_prev_next);
 
 #endif // _HTTPDL_H_
