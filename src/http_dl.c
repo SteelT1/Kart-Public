@@ -203,7 +203,7 @@ void CURL_CheckDownloads(curlinfo_t *ti)
 				ti->fileinfo->status = FS_FALLBACK;
 				fclose(ti->fileinfo->file);
 				remove(ti->fileinfo->filename);
-				CONS_Printf(M_GetText("Failed to download %s (%s)\n"), ti->filename, easy_handle_error);
+				CONS_Alert(CONS_ERROR, M_GetText("Failed to download %s (%s)\n"), ti->filename, easy_handle_error);
 				curl_faileddownload = true;
 			}
 			else
