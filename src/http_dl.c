@@ -69,9 +69,9 @@ static void set_common_opts(curlinfo_t *ti)
 
 	curl_easy_setopt(ti->handle, CURLOPT_FAILONERROR, 1L);
 
-	// abort if slower than 30 bytes/sec during 60 seconds
-	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_TIME, 60L);
-	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_LIMIT, 30L);
+	// abort if slower than 1 bytes/sec during 10 seconds
+	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_TIME, 1L);
+	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_LIMIT, 10L);
 }
 
 void CURL_Cleanup(curlinfo_t *curlc)
@@ -143,7 +143,7 @@ boolean CURL_AddTransfer(curlinfo_t *curl, const char* url, int filenum)
 			curl->fileinfo->file = fopen(curl->fileinfo->filename, "wb");
 			curl_easy_setopt(curl->handle, CURLOPT_WRITEDATA, curl->fileinfo->file);
 		
-			CONS_Printf(M_GetText("[File]: %s [URL]: %s - added to download queue\n"), curl->filename, curl->url);
+			CONS_Printf(M_GetText("URL: %s; added to download queue\n"), curl->url);
 			curl_multi_add_handle(multi_handle, curl->handle);
 			curl->starttime = time(NULL);
 			curl->fileinfo->status = FS_DOWNLOADING;
