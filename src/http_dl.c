@@ -177,6 +177,7 @@ static void cleanup_transfer(curlinfo_t *ti)
 	curl_total_transfers--;
 	curl_multi_remove_handle(multi_handle, ti->handle);
 	curl_easy_cleanup(ti->handle);
+	ti->handle = NULL;
 }
 
 void CURL_CheckDownloads(curlinfo_t *ti)
