@@ -75,6 +75,10 @@ int	snprintf(char *str, size_t n, const char *fmt, ...);
 #include "fastcmp.h"
 #include "keys.h"
 #include "filesrch.h" // refreshdirmenu
+#include "d_clisrv.h" 
+#ifdef HAVE_SD_NOTIFY
+#include "linux/systemd-notify.h"
+#endif
 
 #ifdef CMAKECONFIG
 #include "config.h"
@@ -654,6 +658,10 @@ void D_SRB2Loop(void)
 	if (rendermode == render_soft)
 		V_DrawFixedPatch(0, 0, FRACUNIT/2, 0, (patch_t *)W_CacheLumpNum(W_GetNumForName("KARTKREW"), PU_CACHE), NULL);
 	I_FinishUpdate(); // page flip or blit buffer
+	
+#ifdef HAVE_SD_NOTIFY // First run, so update status.
+	send_sd_status("STATUS=Uptime: %d; Map: %s - %s; Players: %d", (I_GetTime()/TICRATE), G_BuildMapName(gamemap), G_BuildMapTitle(gamemap), D_NumPlayers());
+#endif
 
 	for (;;)
 	{
@@ -736,6 +744,11 @@ void D_SRB2Loop(void)
 		{
 			Discord_RunCallbacks();
 		}
+#endif
+#ifdef HAVE_SD_NOTIFY 
+	// Update status every 2 seconds.
+	if ((I_GetTime()/TICRATE) % 2 == 0)
+		send_sd_status("STATUS=Uptime: %d; Map: %s - %s; Players: %d", (I_GetTime()/TICRATE), G_BuildMapName(gamemap), G_BuildMapTitle(gamemap), D_NumPlayers());
 #endif
 	}
 }

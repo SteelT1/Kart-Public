@@ -62,6 +62,10 @@ char  logfilename[1024];
 #include "exchndl.h"
 #endif
 
+#ifdef HAVE_SD_NOTIFY
+#include "../linux/systemd-notify.h"
+#endif	
+
 #if defined (_WIN32)
 #include "../win32/win_dbg.h"
 typedef BOOL (WINAPI *p_IsDebuggerPresent)(VOID);
@@ -187,6 +191,11 @@ int main(int argc, char **argv)
 	CONS_Printf("Setting up SRB2Kart...\n");
 	D_SRB2Main();
 	CONS_Printf("Entering main game loop...\n");
+
+#ifdef HAVE_SD_NOTIFY	
+	send_sd_status_ready();
+#endif
+
 	// never return
 	D_SRB2Loop();
 

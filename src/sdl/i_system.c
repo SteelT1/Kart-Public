@@ -137,6 +137,10 @@ typedef LPVOID (WINAPI *p_MapViewOfFile) (HANDLE, DWORD, DWORD, DWORD, SIZE_T);
 #include <errno.h>
 #endif
 
+#ifdef HAVE_SD_NOTIFY
+#include "../linux/systemd-notify.h"
+#endif
+
 // Locations for searching the srb2.srb
 #if defined (__unix__) || defined(__APPLE__) || defined (UNIXCOMMON)
 #define DEFAULTWADLOCATION1 "/usr/local/share/games/SRB2Kart"
@@ -3066,7 +3070,7 @@ static void newsignalhandler_Warn(const char *pr)
 	exit(-1);
 }
 
-static void I_Fork(void)
+static int I_Fork(void)
 {
 	int child;
 	int status;
@@ -3083,6 +3087,9 @@ static void I_Fork(void)
 		case 0:
 			break;
 		default:
+#ifdef HAVE_SD_NOTIFY
+		send_sd_status("MAINPID=%u", child);
+#endif
 			if (logstream)
 				fclose(logstream);/* the child has this */
 
@@ -3160,6 +3167,9 @@ void I_Quit(void)
 
 	/* prevent recursive I_Quit() */
 	if (quiting) goto death;
+#ifdef HAVE_SD_NOTIFY	
+	send_sd_status_stop(); // Tell systemd we're stopping now
+#endif	
 	SDLforceUngrabMouse();
 	quiting = SDL_FALSE;
 	I_ShutdownConsole();

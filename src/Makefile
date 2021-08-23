@@ -448,6 +448,10 @@ ifndef NO_LUA
 	include blua/Makefile.cfg
 endif
 
+# Optional systemd-notify support
+include ./linux/Makefile.cfg
+
+
 ifdef NOMD5
 	OPTS+=-DNOMD5
 else
@@ -843,6 +847,9 @@ endif
 ifndef NO_LUA
 	$(CC) $(CFLAGS) -MM blua/*.c >> $(OBJDIR)/depend.ped
 endif
+ifdef USE_SD_NOTIFY
+	$(CC) $(CFLAGS) -MM linux/*.c >> $(OBJDIR)/depend.ped
+endif
 	@sed -e 's,\(.*\)\.o: ,$(subst /,\/,$(OBJDIR))\/&,g' < $(OBJDIR)/depend.ped > $(OBJDIR)/depend.dep
 	$(REMOVE) $(OBJDIR)/depend.ped
 	@echo "Created dependency file, depend.dep"
@@ -885,6 +892,11 @@ $(OBJDIR)/%.o: hardware/%.c
 
 $(OBJDIR)/%.o: blua/%.c
 	$(CC) $(CFLAGS) $(LUA_CFLAGS) $(WFLAGS) -c $< -o $@
+
+ifdef USE_SD_NOTIFY
+$(OBJDIR)/%.o: linux/%.c
+	$(CC) $(CFLAGS) $(WFLAGS) -c $< -o $@
+endif
 
 $(OBJDIR)/%.o: %.nas
 	$(NASM) $(NASMOPTS) -o $@ -f $(NASMFORMAT) $<
