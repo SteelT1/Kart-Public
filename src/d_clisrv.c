@@ -2350,12 +2350,7 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 				{
 					if (fileneeded[i].status == FS_NOTFOUND || fileneeded[i].status == FS_MD5SUMBAD)
 					{
-						curli[i].url[0] = '\0';
-						curli[i].starttime = 0;
-						curli[i].handle = NULL;
-						curli[i].filename[0] = '\0';
 						curli[i].fileinfo = &fileneeded[i];
-						curli[i].error_buffer[0] = '\0'; 
 						curl_total_transfers++;
 					}
 				}

@@ -45,17 +45,21 @@ static size_t write_data_cb(void *ptr, size_t size, size_t nmemb, FILE *stream)
 }
 
 /* Callback function to show progress information
- * Used to update the download screen progress */
+ * Used to update the download screen meter */
 static int progress_cb(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow)
 {
 	curlinfo_t ci;
+	INT32 dlspeed = 0;
 	// Function prototype requires these but we won't use, so just discard
 	(void)ultotal;
 	(void)ulnow; 
 	ci = *(curlinfo_t *)clientp;
 	ci.fileinfo->currentsize = (UINT32)dlnow;
 	ci.fileinfo->totalsize = (UINT32)dltotal;
-	getbytes = dlnow / (time(NULL) - ci.starttime);
+	ci.curtime = I_GetTime()/TICRATE;
+	dlspeed = dlnow / (ci.curtime - ci.starttime);
+	if (dlspeed > 0)
+		getbytes = dlspeed;
 	return 0;
 }
 
@@ -75,9 +79,9 @@ static void set_common_opts(curlinfo_t *ti)
 
 	curl_easy_setopt(ti->handle, CURLOPT_FAILONERROR, 1L);
 
-	// abort if slower than 1 bytes/sec during 10 seconds
+	// abort if slower than 1 bytes/sec during 15 seconds
 	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_TIME, 1L);
-	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_LIMIT, 10L);
+	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_LIMIT, 15L);
 	
 	// provide a buffer to store errors in //
 	curl_easy_setopt(ti->handle, CURLOPT_ERRORBUFFER, ti->error_buffer);
@@ -154,7 +158,7 @@ boolean CURL_AddTransfer(curlinfo_t *curl, const char* url, int filenum)
 		
 			CONS_Printf(M_GetText("URL: %s; added to download queue\n"), curl->url);
 			curl_multi_add_handle(multi_handle, curl->handle);
-			curl->starttime = time(NULL);
+			curl->starttime = I_GetTime()/TICRATE;
 			curl->fileinfo->status = FS_DOWNLOADING;
 			lastfilenum = filenum;
 			return true;

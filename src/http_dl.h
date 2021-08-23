@@ -21,11 +21,14 @@
 typedef struct curlinfo_s
 {
 	char url[HTTP_MAX_URL_LENGTH]; // The url for this transfer
-	time_t starttime; // The time when this transfer was started
+	tic_t starttime;
+	tic_t curtime;
 	CURL *handle; // The easy handle for this transfer 
 	char filename[MAX_WADPATH]; // Name of the file
 	fileneeded_t *fileinfo; // The fileneeded_t for this transfer
 	char error_buffer[CURL_ERROR_SIZE]; // Buffer to store error messages.
+	double oldbytes;
+	double nowbytes;
 } curlinfo_t;
 
 typedef struct HTTP_login HTTP_login;
