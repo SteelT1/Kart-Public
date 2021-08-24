@@ -82,8 +82,8 @@ static void set_common_opts(curlinfo_t *ti)
 	curl_easy_setopt(ti->handle, CURLOPT_FAILONERROR, 1L);
 
 	// abort if slower than 1 bytes/sec during 10 seconds
-	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_TIME, 1L);
-	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_LIMIT, 10L);
+	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_TIME, 10L);
+	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_LIMIT, 1L);
 	
 	// provide a buffer to store errors in
 	curl_easy_setopt(ti->handle, CURLOPT_ERRORBUFFER, ti->error_buffer);
