@@ -20,6 +20,8 @@
 
 static int running_handles = 0;
 static CURLM *multi_handle; // The multi handle used to keep track of all ongoing transfers
+static int numfds;
+static int repeats = 0;
 SINT8 curl_initstatus = 0;
 UINT32 curl_active_transfers = 0; // Number of currently ongoing transfers
 UINT32 curl_total_transfers = 0; // Number of total tranfeers
@@ -79,11 +81,11 @@ static void set_common_opts(curlinfo_t *ti)
 
 	curl_easy_setopt(ti->handle, CURLOPT_FAILONERROR, 1L);
 
-	// abort if slower than 1 bytes/sec during 15 seconds
+	// abort if slower than 1 bytes/sec during 10 seconds
 	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_TIME, 1L);
-	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_LIMIT, 15L);
+	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_LIMIT, 10L);
 	
-	// provide a buffer to store errors in //
+	// provide a buffer to store errors in
 	curl_easy_setopt(ti->handle, CURLOPT_ERRORBUFFER, ti->error_buffer);
 }
 
@@ -122,11 +124,7 @@ boolean CURL_AddTransfer(curlinfo_t *curl, const char* url, int filenum)
 		multi_handle = curl_multi_init();
 		
 		if (multi_handle)
-		{
-			// only keep 10 connections in the cache
-			curl_multi_setopt(multi_handle, CURLMOPT_MAXCONNECTS, 10L);
 			curl_initstatus = 1;
-		}
 	}
 
 	if (curl_initstatus == 1)
@@ -170,16 +168,35 @@ boolean CURL_AddTransfer(curlinfo_t *curl, const char* url, int filenum)
 
 void CURL_DownloadFiles(void)
 {
-	int numfds;
-
+	CURLMcode mc;
+	
     if (multi_handle)
     {
-    	curl_multi_perform(multi_handle, &running_handles);
-
+		curl_multi_perform(multi_handle, &running_handles);
+		
     	if (running_handles)
-      	{
-      		// wait for activity, timeout or "nothing" 
-			curl_multi_wait(multi_handle, NULL, 0, 1000, &numfds);
+      	{	
+			if (mc == CURLM_OK) 
+			{
+				// wait for activity, timeout or "nothing" 
+				curl_multi_wait(multi_handle, NULL, 0, 1000, &numfds);
+			}
+			
+			if (mc != CURLM_OK)
+			{
+				CONS_Debug(DBG_NETPLAY, "curl_multi failed, code %d.\n", mc);
+				return;
+			}
+			
+			if (!numfds) 
+			{
+				repeats++; // count number of repeated zero numfds 
+				
+				if (repeats > 1) 
+					I_Sleep();
+			}
+			else
+				repeats = 0;
       	}
     }
 }
