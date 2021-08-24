@@ -172,7 +172,7 @@ void CURL_DownloadFiles(void)
 	
     if (multi_handle)
     {
-		curl_multi_perform(multi_handle, &running_handles);
+		mc = curl_multi_perform(multi_handle, &running_handles);
 		
     	if (running_handles)
       	{	
