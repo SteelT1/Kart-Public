@@ -17,19 +17,19 @@
 #include <curl/curl.h>
 #define HTTP_MULTI_DL // Undefine this to disable multiple downloads support
 
-// Information of a curl transfer (one for each transfer)
-typedef struct curlinfo_s
+// Information of a download (one for each download)
+typedef struct httpdl_info_s
 {
-	char url[HTTP_MAX_URL_LENGTH]; // The url for this transfer
+	char url[HTTP_MAX_URL_LENGTH]; // The url for this download
 	tic_t starttime;
 	tic_t curtime;
-	CURL *handle; // The easy handle for this transfer 
+	CURL *handle; // The easy handle for this download 
 	char filename[MAX_WADPATH]; // Name of the file
-	fileneeded_t *fileinfo; // The fileneeded_t for this transfer
+	fileneeded_t *fileinfo; // The fileneeded_t for this download
 	char error_buffer[CURL_ERROR_SIZE]; // Buffer to store error messages.
 	double oldbytes;
 	double nowbytes;
-} curlinfo_t;
+} httpdl_info_t;
 
 typedef struct HTTP_login HTTP_login;
 
@@ -39,19 +39,19 @@ extern struct HTTP_login
 	char       * auth;
 	HTTP_login * next;
 }
-*curl_logins;
+*httpdl_logins;
 
-extern UINT32 curl_active_transfers; // Number of currently ongoing transfers
-extern UINT32 curl_total_transfers; // Number of total tranfeers
-extern boolean curl_faileddownload; // Did a download fail?
-extern curlinfo_t curli[MAX_WADFILES];
-extern SINT8 curl_initstatus;
+extern UINT32 httpdl_active_jobs; // Number of currently ongoing download
+extern UINT32 httpdl_total_jobs; // Number of total download
+extern boolean httpdl_faileddownload; // Did a download fail?
+extern httpdl_info_t httpdl_downloads[MAX_WADFILES];
+extern SINT8 httpdl_initstatus;
 extern char http_source[HTTP_MAX_URL_LENGTH];
 
-void CURL_Cleanup(curlinfo_t *curl);
-boolean CURL_AddTransfer(curlinfo_t *curl, const char* url, int filenum);
-void CURL_DownloadFiles(void);
-extern void CURL_CheckDownloads(curlinfo_t *ti);
-HTTP_login * CURLGetLogin (const char *url, HTTP_login ***return_prev_next);
+void HTTPDL_Cleanup(httpdl_info_t *transfer);
+boolean HTTPDL_AddDownload(httpdl_info_t *curl, const char* url, int filenum);
+void HTTPDL_DownloadFiles(void);
+extern void HTTPDL_CheckDownloads(httpdl_info_t *download);
+HTTP_login * HTTPDL_GetLogin (const char *url, HTTP_login ***return_prev_next);
 
 #endif // _HTTPDL_H_

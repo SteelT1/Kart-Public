@@ -22,18 +22,11 @@ static int running_handles = 0;
 static CURLM *multi_handle; // The multi handle used to keep track of all ongoing transfers
 static int numfds;
 static int repeats = 0;
-SINT8 curl_initstatus = 0;
-UINT32 curl_active_transfers = 0; // Number of currently ongoing transfers
-UINT32 curl_total_transfers = 0; // Number of total tranfeers
-boolean curl_faileddownload = false; // Did a download fail?
-HTTP_login *curl_logins;
-
-static void ChangeFileExtension(char* filename, char* newExtension)
-{
-	static char* lastSlash;
-	lastSlash = strstr(filename, ".");
-    strlcpy(lastSlash, newExtension, strlen(lastSlash));
-}
+SINT8 httpdl_initstatus = 0;
+UINT32 httpdl_active_jobs = 0; // Number of currently ongoing jobs
+UINT32 httpdl_total_jobs = 0; // Number of total jobs
+boolean httpdl_faileddownload = false; // Did a download fail?
+HTTP_login *httpdl_logins;
 
 /* Callback function to write received data to file 
  * Required because on win32 not setting can cause crashes if CURLOPT_WRITEFUNCTION isn't set but CURLOPT_WRITEDATA is
@@ -50,67 +43,78 @@ static size_t write_data_cb(void *ptr, size_t size, size_t nmemb, FILE *stream)
  * Used to update the download screen meter */
 static int progress_cb(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow)
 {
-	curlinfo_t ci;
+	httpdl_info_t di;
 	INT32 dlspeed = 0;
 	// Function prototype requires these but we won't use, so just discard
 	(void)ultotal;
 	(void)ulnow; 
-	ci = *(curlinfo_t *)clientp;
-	ci.fileinfo->currentsize = (UINT32)dlnow;
-	ci.fileinfo->totalsize = (UINT32)dltotal;
-	ci.curtime = I_GetTime()/TICRATE;
-	dlspeed = dlnow / (ci.curtime - ci.starttime);
+	di = *(httpdl_info_t *)clientp;
+	di.fileinfo->currentsize = (UINT32)dlnow;
+	di.fileinfo->totalsize = (UINT32)dltotal;
+	di.curtime = I_GetTime()/TICRATE;
+	dlspeed = dlnow / (di.curtime - di.starttime);
 	if (dlspeed > 0)
 		getbytes = dlspeed;
 	return 0;
 }
 
-static void set_common_opts(curlinfo_t *ti)
+static void set_common_opts(httpdl_info_t *transfer)
 {
-	curl_easy_setopt(ti->handle, CURLOPT_WRITEFUNCTION, write_data_cb);
-	curl_easy_setopt(ti->handle, CURLOPT_NOPROGRESS, 0L);
-	curl_easy_setopt(ti->handle, CURLOPT_PROGRESSFUNCTION, progress_cb);
-	curl_easy_setopt(ti->handle, CURLOPT_PROGRESSDATA, ti);
+	curl_easy_setopt(transfer->handle, CURLOPT_WRITEFUNCTION, write_data_cb);
+	curl_easy_setopt(transfer->handle, CURLOPT_NOPROGRESS, 0L);
+	curl_easy_setopt(transfer->handle, CURLOPT_PROGRESSFUNCTION, progress_cb);
+	curl_easy_setopt(transfer->handle, CURLOPT_PROGRESSDATA, transfer);
 	
 	// Only allow HTTP and HTTPS
-	curl_easy_setopt(ti->handle, CURLOPT_PROTOCOLS, CURLPROTO_HTTP|CURLPROTO_HTTPS);
-	curl_easy_setopt(ti->handle, CURLOPT_USERAGENT, va("SRB2Kart/v%d.%d", VERSION, SUBVERSION)); // Set user agent as some servers won't accept invalid user agents.
+	curl_easy_setopt(transfer->handle, CURLOPT_PROTOCOLS, CURLPROTO_HTTP|CURLPROTO_HTTPS);
+	curl_easy_setopt(transfer->handle, CURLOPT_USERAGENT, va("SRB2Kart/v%d.%d", VERSION, SUBVERSION)); // Set user agent as some servers won't accept invalid user agents.
 
 	// Follow a redirect request, if sent by the server.
-	curl_easy_setopt(ti->handle, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(transfer->handle, CURLOPT_FOLLOWLOCATION, 1L);
 
-	curl_easy_setopt(ti->handle, CURLOPT_FAILONERROR, 1L);
+	curl_easy_setopt(transfer->handle, CURLOPT_FAILONERROR, 1L);
 
 	// abort if slower than 1 bytes/sec during 10 seconds
-	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_TIME, 10L);
-	curl_easy_setopt(ti->handle, CURLOPT_LOW_SPEED_LIMIT, 1L);
+	curl_easy_setopt(transfer->handle, CURLOPT_LOW_SPEED_TIME, 10L);
+	curl_easy_setopt(transfer->handle, CURLOPT_LOW_SPEED_LIMIT, 1L);
 	
 	// provide a buffer to store errors in
-	curl_easy_setopt(ti->handle, CURLOPT_ERRORBUFFER, ti->error_buffer);
+	curl_easy_setopt(transfer->handle, CURLOPT_ERRORBUFFER, transfer->error_buffer);
 }
 
-void CURL_Cleanup(curlinfo_t *curlc)
+static void cleanup_download(httpdl_info_t *download)
+{
+	httpdl_active_jobs--;
+	httpdl_total_jobs--;
+	curl_multi_remove_handle(multi_handle, download->handle);
+	curl_easy_cleanup(download->handle);
+	download->handle = NULL;
+}
+
+void HTTPDL_Cleanup(httpdl_info_t *download)
 {
 	UINT32 i;
 
-	if (curl_initstatus == 1)
+	if (httpdl_initstatus == 1)
     {
-    	for (i = 0; i < curl_total_transfers; i++)
+    	for (i = 0; i < httpdl_total_jobs; i++)
     	{
-    		if (curlc[i].handle != NULL)
-    		{
-	    		curl_multi_remove_handle(multi_handle, curlc[i].handle);
-				curl_easy_cleanup(curlc[i].handle);
-    		}
+    		if (download[i].handle != NULL)
+				cleanup_download(download);
     	}
 
 		curl_multi_cleanup(multi_handle);
 		curl_global_cleanup();
-    	curl_initstatus = 0;
+    	httpdl_initstatus = 0;
     }
+    
+    httpdl_active_jobs = 0;
+	httpdl_total_jobs = 0;
+	httpdl_faileddownload = false;
+	memset(download, 0, sizeof(*download));
 }
 
-boolean CURL_AddTransfer(curlinfo_t *curl, const char* url, int filenum)
+boolean HTTPDL_AddDownload(httpdl_info_t *download, const char* url, int filenum)
 {
 	HTTP_login *login;	
 #ifdef PARANOIA
@@ -118,55 +122,54 @@ boolean CURL_AddTransfer(curlinfo_t *curl, const char* url, int filenum)
 		I_Error("Attempted to download files in -nodownload mode");
 #endif
 
-	if (curl_initstatus == 0)
+	if (httpdl_initstatus == 0)
 	{
 		curl_global_init(CURL_GLOBAL_ALL);
 		multi_handle = curl_multi_init();
 		
 		if (multi_handle)
-			curl_initstatus = 1;
+			httpdl_initstatus = 1;
 	}
 
-	if (curl_initstatus == 1)
+	if (httpdl_initstatus == 1)
 	{
-		curl->handle = curl_easy_init();
+		download->handle = curl_easy_init();
 
-		if (curl->handle)
+		if (download->handle)
 		{
-			set_common_opts(curl);
+			set_common_opts(download);
 
 			I_mkdir(downloaddir, 0755);
 
-			strlcpy(curl->filename, curl->fileinfo->filename, sizeof(curl->filename));
-			snprintf(curl->url, sizeof(curl->url), "%s/%s", url, curl->filename);
+			strlcpy(download->filename, download->fileinfo->filename, sizeof(download->filename));
+			snprintf(download->url, sizeof(download->url), "%s/%s", url, download->filename);
 
-			curl_easy_setopt(curl->handle, CURLOPT_URL, curl->url);
+			curl_easy_setopt(download->handle, CURLOPT_URL, download->url);
 			
 			// Authenticate if the user so wishes
-			login = CURLGetLogin(url, NULL);
+			login = HTTPDL_GetLogin(url, NULL);
 
 			if (login)
 			{
-				curl_easy_setopt(curl->handle, CURLOPT_USERPWD, login->auth);
+				curl_easy_setopt(download->handle, CURLOPT_USERPWD, login->auth);
 			}			
 
-			strcatbf(curl->fileinfo->filename, downloaddir, "/");
-			curl->fileinfo->file = fopen(curl->fileinfo->filename, "wb");
-			curl_easy_setopt(curl->handle, CURLOPT_WRITEDATA, curl->fileinfo->file);
+			strcatbf(download->fileinfo->filename, downloaddir, "/");
+			download->fileinfo->file = fopen(download->fileinfo->filename, "wb");
+			curl_easy_setopt(download->handle, CURLOPT_WRITEDATA, download->fileinfo->file);
 		
-			CONS_Printf(M_GetText("URL: %s; added to download queue\n"), curl->url);
-			curl_multi_add_handle(multi_handle, curl->handle);
-			curl->starttime = I_GetTime()/TICRATE;
-			curl->fileinfo->status = FS_DOWNLOADING;
+			CONS_Printf(M_GetText("URL: %s; added to download queue\n"), download->url);
+			curl_multi_add_handle(multi_handle, download->handle);
+			download->starttime = I_GetTime()/TICRATE;
+			download->fileinfo->status = FS_DOWNLOADING;
 			lastfilenum = filenum;
 			return true;
 		}
 	}
-	curl_faileddownload = true;
 	return false;
 }
 
-void CURL_DownloadFiles(void)
+void HTTPDL_DownloadFiles(void)
 {
 	CURLMcode mc;
 	
@@ -201,16 +204,7 @@ void CURL_DownloadFiles(void)
     }
 }
 
-static void cleanup_transfer(curlinfo_t *ti)
-{
-	curl_active_transfers--;
-	curl_total_transfers--;
-	curl_multi_remove_handle(multi_handle, ti->handle);
-	curl_easy_cleanup(ti->handle);
-	ti->handle = NULL;
-}
-
-void CURL_CheckDownloads(curlinfo_t *ti)
+void HTTPDL_CheckDownloads(httpdl_info_t *download)
 {
 	CURLMsg *m; // for picking up messages with the transfer status
 	CURLcode easyres; // Result from easy handle for transfer
@@ -225,42 +219,39 @@ void CURL_CheckDownloads(curlinfo_t *ti)
 			easyres = m->data.result;
 			if (easyres != CURLE_OK)
 			{
-				if (ti->error_buffer[0] == '\0')
-				{
-					easy_err_msg_len = strlen(curl_easy_strerror(easyres));
-					strlcpy(ti->error_buffer, curl_easy_strerror(easyres), easy_err_msg_len);
-				}
+				if (download->error_buffer[0] == '\0')
+					strlcpy(download->error_buffer, curl_easy_strerror(easyres), CURL_ERROR_SIZE);
 				
-				ti->fileinfo->status = FS_FALLBACK;
-				fclose(ti->fileinfo->file);
-				remove(ti->fileinfo->filename);
-				CONS_Alert(CONS_ERROR, M_GetText("Failed to download %s (%s)\n"), ti->filename, ti->error_buffer);
-				curl_faileddownload = true;
+				download->fileinfo->status = FS_FALLBACK;
+				fclose(download->fileinfo->file);
+				remove(download->fileinfo->filename);
+				CONS_Alert(CONS_ERROR, M_GetText("Failed to download %s (%s)\n"), download->filename, download->error_buffer);
+				httpdl_faileddownload = true;
 			}
 			else
 			{
-				CONS_Printf(M_GetText("Finished downloading %s\n"), ti->filename);
+				CONS_Printf(M_GetText("Finished downloading %s\n"), download->filename);
 				downloadcompletednum++;
-				downloadcompletedsize += ti->fileinfo->totalsize;
-				ti->fileinfo->status = FS_FOUND;
-				fclose(ti->fileinfo->file);
+				downloadcompletedsize += download->fileinfo->totalsize;
+				download->fileinfo->status = FS_FOUND;
+				fclose(download->fileinfo->file);
 			}
 
-			cleanup_transfer(ti);
-			if (!curl_total_transfers)
+			cleanup_download(download);
+			if (!httpdl_total_jobs)
 				break;
 		}
 	}
 }
 
 HTTP_login *
-CURLGetLogin (const char *url, HTTP_login ***return_prev_next)
+HTTPDL_GetLogin (const char *url, HTTP_login ***return_prev_next)
 {
 	HTTP_login  * login;
 	HTTP_login ** prev_next;
 
 	for (
-			prev_next = &curl_logins;
+			prev_next = &httpdl_logins;
 			( login = (*prev_next));
 			prev_next = &login->next
 	){

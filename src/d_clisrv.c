@@ -156,7 +156,7 @@ tic_t firstconnectattempttime = 0;
 // engine
 
 #ifdef HAVE_CURL
-curlinfo_t curli[MAX_WADFILES];
+httpdl_info_t httpdl_downloads[MAX_WADFILES];
 char http_source[HTTP_MAX_URL_LENGTH];
 #endif
 
@@ -1306,10 +1306,10 @@ static inline void CL_DrawConnectionStatus(void)
 				strncpy(tempname, filename, sizeof(tempname)-1);
 			}
 
-			if (curl_active_transfers > 1)
+			if (httpdl_active_jobs > 1)
 			{
 				V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-58-22, V_YELLOWMAP,
-					va(M_GetText("Downloading %d files"), curl_active_transfers));
+					va(M_GetText("Downloading %d files"), httpdl_active_jobs));
 			}
 			else
 			{
@@ -2051,7 +2051,7 @@ static void M_ConfirmConnect(event_t *ev)
 			if (totalfilesrequestednum > 0)
 			{
 #ifdef HAVE_CURL
-				if (http_source[0] == '\0' || curl_faileddownload)
+				if (http_source[0] == '\0' || httpdl_faileddownload)
 #endif
 				{
 					if (CL_SendRequestFile())
@@ -2139,7 +2139,7 @@ static boolean CL_FinishedFileList(void)
 		// must download something
 		// can we, though?
 #ifdef HAVE_CURL
-		if (http_source[0] == '\0' || curl_faileddownload)
+		if (http_source[0] == '\0' || httpdl_faileddownload)
 #endif
 		{
 			if (!CL_CheckDownloadable()) // nope!
@@ -2161,7 +2161,7 @@ static boolean CL_FinishedFileList(void)
 		}
 
 #ifdef HAVE_CURL
-		if (!curl_faileddownload)
+		if (!httpdl_faileddownload)
 #endif
 		{
 #ifndef NONET
@@ -2350,8 +2350,8 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 				{
 					if (fileneeded[i].status == FS_NOTFOUND || fileneeded[i].status == FS_MD5SUMBAD)
 					{
-						curli[i].fileinfo = &fileneeded[i];
-						curl_total_transfers++;
+						httpdl_downloads[i].fileinfo = &fileneeded[i];
+						httpdl_total_jobs++;
 					}
 				}
 
@@ -2362,39 +2362,39 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 		case CL_DOWNLOADHTTPFILES:
 			waitmore = false; 
 
-			CURL_DownloadFiles();
+			HTTPDL_DownloadFiles();
 
 			for (i = 0; i < fileneedednum; i++) 
 			{
 				if (fileneeded[i].status == FS_NOTFOUND || fileneeded[i].status == FS_MD5SUMBAD)
 				{
-					if (!curli[i].handle)
+					if (!httpdl_downloads[i].handle)
 					{
-						if (curl_active_transfers < 1)
+						if (httpdl_active_jobs < 1)
 						{
-							CURL_AddTransfer(&curli[i], http_source, i);
-							curl_active_transfers++;
+							HTTPDL_AddDownload(&httpdl_downloads[i], http_source, i);
+							httpdl_active_jobs++;
 						}
 						waitmore = true;
 						break;
 					}
 				}
 				
-				if (curli[i].handle && curli[i].fileinfo->status == FS_DOWNLOADING)
-					CURL_CheckDownloads(&curli[i]);				
+				if (httpdl_downloads[i].handle && httpdl_downloads[i].fileinfo->status == FS_DOWNLOADING)
+					HTTPDL_CheckDownloads(&httpdl_downloads[i]);				
 			}
 
 			if (waitmore)
 				break; // exit the case
 
-			if (curl_faileddownload && !curl_total_transfers)
+			if (httpdl_faileddownload && !httpdl_total_jobs)
 			{
 				CONS_Printf("One or more files failed to download, attempting to download using internal downloader\n");
 				cl_mode = CL_CHECKFILES;
 				break;
 			}
 
-			if (!curl_total_transfers)
+			if (!httpdl_total_jobs)
 				cl_mode = CL_LOADFILES;
 
 			break;
@@ -3033,12 +3033,8 @@ void CL_Reset(void)
 	connectiontimeout = (tic_t)cv_nettimeout.value; //reset this temporary hack
 
 #ifdef HAVE_CURL
-	CURL_Cleanup(curli);
-	curl_active_transfers = 0;
-	curl_total_transfers = 0;
-	curl_faileddownload = false;
+	HTTPDL_Cleanup(httpdl_downloads);
 	http_source[0] = '\0';
-	memset(curli, 0, sizeof(curli));
 #endif
 
 	// D_StartTitle should get done now, but the calling function will handle it
@@ -3522,7 +3518,7 @@ static void Command_set_http_login (void)
 		return;
 	}
 
-	login = CURLGetLogin(COM_Argv(1), &prev_next);
+	login = HTTPDL_GetLogin(COM_Argv(1), &prev_next);
 
 	if (COM_Argc() == 2)
 	{
@@ -3545,8 +3541,8 @@ static void Command_set_http_login (void)
 
 		login->auth = Z_StrDup(COM_Argv(2));
 
-		login->next = curl_logins;
-		curl_logins = login;
+		login->next = httpdl_logins;
+		httpdl_logins = login;
 	}
 }
 
@@ -3559,7 +3555,7 @@ static void Command_list_http_logins (void)
 	HTTP_login *login;
 
 	for (
-			login = curl_logins;
+			login = httpdl_logins;
 			login;
 			login = login->next
 	){
