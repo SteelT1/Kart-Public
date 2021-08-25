@@ -116,7 +116,8 @@ void HTTPDL_Cleanup(httpdl_info_t *download)
 
 boolean HTTPDL_AddDownload(httpdl_info_t *download, const char* url, int filenum)
 {
-	HTTP_login *login;	
+	HTTP_login *login;
+	char *output = NULL;
 #ifdef PARANOIA
 	if (M_CheckParm("-nodownload"))
 		I_Error("Attempted to download files in -nodownload mode");
@@ -143,8 +144,19 @@ boolean HTTPDL_AddDownload(httpdl_info_t *download, const char* url, int filenum
 
 			strlcpy(download->filename, download->fileinfo->filename, sizeof(download->filename));
 			snprintf(download->url, sizeof(download->url), "%s/%s", url, download->filename);
-
-			curl_easy_setopt(download->handle, CURLOPT_URL, download->url);
+			
+			// URL encode the string
+			output = curl_easy_escape(download->handle, download->filename, 0);
+			
+			if (output)
+			{
+				// Copy the encoded URL 
+				snprintf(download->url, sizeof(download->url), "%s/%s", url, output);
+				curl_free(output);
+				output = NULL;
+			}
+				
+			curl_easy_setopt(download->handle, CURLOPT_URL, download->url);	
 			
 			// Authenticate if the user so wishes
 			login = HTTPDL_GetLogin(url, NULL);
@@ -209,7 +221,6 @@ void HTTPDL_CheckDownloads(httpdl_info_t *download)
 	CURLMsg *m; // for picking up messages with the transfer status
 	CURLcode easyres; // Result from easy handle for transfer
 	int msg_left;
-	int easy_err_msg_len;
 
 	// See how the downloads went
 	while ((m = curl_multi_info_read(multi_handle, &msg_left)))
@@ -225,6 +236,7 @@ void HTTPDL_CheckDownloads(httpdl_info_t *download)
 				download->fileinfo->status = FS_FALLBACK;
 				fclose(download->fileinfo->file);
 				remove(download->fileinfo->filename);
+				download->fileinfo->file = NULL;
 				CONS_Alert(CONS_ERROR, M_GetText("Failed to download %s (%s)\n"), download->filename, download->error_buffer);
 				httpdl_faileddownload = true;
 			}

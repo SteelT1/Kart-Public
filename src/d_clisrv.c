@@ -2372,7 +2372,8 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 					{
 						if (httpdl_active_jobs < 1)
 						{
-							HTTPDL_AddDownload(&httpdl_downloads[i], http_source, i);
+							if (!HTTPDL_AddDownload(&httpdl_downloads[i], http_source, i))
+								httpdl_faileddownload = true;
 							httpdl_active_jobs++;
 						}
 						waitmore = true;
