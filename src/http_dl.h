@@ -15,7 +15,6 @@
 #include "w_wad.h"
 #include "d_clisrv.h"
 #include <curl/curl.h>
-#define HTTP_MULTI_DL // Undefine this to disable multiple downloads support
 
 // Information of a download (one for each download)
 typedef struct httpdl_info_s
@@ -27,8 +26,6 @@ typedef struct httpdl_info_s
 	char filename[MAX_WADPATH]; // Name of the file
 	fileneeded_t *fileinfo; // The fileneeded_t for this download
 	char error_buffer[CURL_ERROR_SIZE]; // Buffer to store error messages.
-	double oldbytes;
-	double nowbytes;
 } httpdl_info_t;
 
 typedef struct HTTP_login HTTP_login;
@@ -43,7 +40,7 @@ extern struct HTTP_login
 
 extern UINT32 httpdl_active_jobs; // Number of currently ongoing download
 extern UINT32 httpdl_total_jobs; // Number of total download
-extern boolean httpdl_faileddownload; // Did a download fail?
+extern INT32 httpdl_faileddownload; // Number of failed downloads
 extern httpdl_info_t httpdl_downloads[MAX_WADFILES];
 extern SINT8 httpdl_initstatus;
 extern char http_source[HTTP_MAX_URL_LENGTH];

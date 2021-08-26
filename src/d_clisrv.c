@@ -2373,7 +2373,7 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 						if (httpdl_active_jobs < 1)
 						{
 							if (!HTTPDL_AddDownload(&httpdl_downloads[i], http_source, i))
-								httpdl_faileddownload = true;
+								httpdl_faileddownload++;
 							httpdl_active_jobs++;
 						}
 						waitmore = true;
@@ -2390,7 +2390,9 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 
 			if (httpdl_faileddownload && !httpdl_total_jobs)
 			{
-				CONS_Printf("One or more files failed to download, attempting to download using internal downloader\n");
+				CONS_Alert(CONS_NOTICE, "%d %s failed to download, attempting to download using internal downloader.\n", 
+					httpdl_faileddownload, 
+					(httpdl_faileddownload != 1) ? "files" : "file");
 				cl_mode = CL_CHECKFILES;
 				break;
 			}

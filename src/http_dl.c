@@ -25,7 +25,7 @@ static int repeats = 0;
 SINT8 httpdl_initstatus = 0;
 UINT32 httpdl_active_jobs = 0; // Number of currently ongoing jobs
 UINT32 httpdl_total_jobs = 0; // Number of total jobs
-boolean httpdl_faileddownload = false; // Did a download fail?
+INT32 httpdl_faileddownload = 0; // Number of failed downloads
 HTTP_login *httpdl_logins;
 
 /* Callback function to write received data to file 
@@ -110,7 +110,7 @@ void HTTPDL_Cleanup(httpdl_info_t *download)
     
     httpdl_active_jobs = 0;
 	httpdl_total_jobs = 0;
-	httpdl_faileddownload = false;
+	httpdl_faileddownload = 0;
 	memset(download, 0, sizeof(*download));
 }
 
@@ -238,7 +238,7 @@ void HTTPDL_CheckDownloads(httpdl_info_t *download)
 				remove(download->fileinfo->filename);
 				download->fileinfo->file = NULL;
 				CONS_Alert(CONS_ERROR, M_GetText("Failed to download %s (%s)\n"), download->filename, download->error_buffer);
-				httpdl_faileddownload = true;
+				httpdl_faileddownload++;
 			}
 			else
 			{
