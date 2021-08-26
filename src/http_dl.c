@@ -1,6 +1,6 @@
 // SONIC ROBO BLAST 2 KART
 //-----------------------------------------------------------------------------
-// Copyright (C) 2020 by Victor "SteelT" Fuentes.
+// Copyright (C) 2021 by Victor "SteelT" Fuentes.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
