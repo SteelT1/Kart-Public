@@ -45,7 +45,7 @@ extern httpdl_info_t httpdl_downloads[MAX_WADFILES];
 extern SINT8 httpdl_initstatus;
 extern char http_source[HTTP_MAX_URL_LENGTH];
 
-void HTTPDL_Cleanup(httpdl_info_t *transfer);
+void HTTPDL_Cleanup(httpdl_info_t *download);
 boolean HTTPDL_AddDownload(httpdl_info_t *curl, const char* url, int filenum);
 void HTTPDL_DownloadFiles(void);
 extern void HTTPDL_CheckDownloads(httpdl_info_t *download);
