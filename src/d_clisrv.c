@@ -2346,10 +2346,19 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 		case CL_PREPAREHTTPFILES:
 			if (http_source[0])
 			{
+				I_mkdir(downloaddir, 0755);
+				
+				if (!HTTPDL_Init())
+				{
+					cl_mode = CL_CHECKFILES;
+					break;
+				}
+					
 				for (i = 0; i < fileneedednum; i++)
 				{
 					if (fileneeded[i].status == FS_NOTFOUND || fileneeded[i].status == FS_MD5SUMBAD)
 					{
+						httpdl_downloads[i].filenum = i;
 						httpdl_downloads[i].fileinfo = &fileneeded[i];
 						httpdl_total_jobs++;
 					}
@@ -2360,25 +2369,22 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 			break;
 
 		case CL_DOWNLOADHTTPFILES:
-			waitmore = false; 
-
+			waitmore = false;
 			HTTPDL_DownloadFiles();
 
 			for (i = 0; i < fileneedednum; i++) 
 			{
 				if (fileneeded[i].status == FS_NOTFOUND || fileneeded[i].status == FS_MD5SUMBAD)
 				{
-					if (!httpdl_downloads[i].handle)
+					if (httpdl_active_jobs < 1)
 					{
-						if (httpdl_active_jobs < 1)
-						{
-							if (!HTTPDL_AddDownload(&httpdl_downloads[i], http_source, i))
-								httpdl_faileddownload++;
+						if (HTTPDL_AddDownload(&httpdl_downloads[i], http_source)) 
 							httpdl_active_jobs++;
-						}
-						waitmore = true;
-						break;
+						else
+							httpdl_faileddownload++;
 					}
+					waitmore = true;
+					break;
 				}
 				
 				if (httpdl_downloads[i].handle && httpdl_downloads[i].fileinfo->status == FS_DOWNLOADING)
@@ -2398,8 +2404,11 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 			}
 
 			if (!httpdl_total_jobs)
+			{
+				HTTPDL_Cleanup(httpdl_downloads);
 				cl_mode = CL_LOADFILES;
-
+			}
+				
 			break;
 #endif
 		case CL_DOWNLOADFILES:
