@@ -59,6 +59,8 @@
 #include "discord.h"
 #endif
 
+UINT8 numserversexec = 0;
+
 // ------
 // protos
 // ------
@@ -168,6 +170,8 @@ static void Command_Teamchange4_f(void);
 static void Command_ServerTeamChange_f(void);
 
 static void Command_Clearscores_f(void);
+
+static void Command_AddServerJoinExec_f(void);
 
 // Remote Administration
 static void Command_Changepassword_f(void);
@@ -473,6 +477,7 @@ boolean deferencoremode = false;
 UINT8 splitscreen = 0;
 boolean circuitmap = true; // SRB2kart
 INT32 adminplayers[MAXPLAYERS];
+serverexec_t serverjoinexec[MAX_SERVER_EXEC];
 
 /// \warning Keep this up-to-date if you add/remove/rename net text commands
 const char *netxcmdnames[MAXNETXCMD - 1] =
@@ -776,6 +781,7 @@ void D_RegisterClientCommands(void)
 	COM_AddCommand("screenshot", M_ScreenShot);
 	COM_AddCommand("startmovie", Command_StartMovie_f);
 	COM_AddCommand("stopmovie", Command_StopMovie_f);
+	COM_AddCommand("addserverjoinexec", Command_AddServerJoinExec_f);
 
 	CV_RegisterVar(&cv_screenshot_option);
 	CV_RegisterVar(&cv_screenshot_folder);
@@ -5752,4 +5758,24 @@ void Got_DiscordInfo(UINT8 **p, INT32 playernum)
 #else
 	(*p) += 3;
 #endif
+}
+
+static void Command_AddServerJoinExec_f(void)
+{
+	if (numserversexec >= MAX_SERVER_EXEC)
+	{
+		CONS_Alert(CONS_ERROR, "Too many servers; can't add more servers!\n");
+		return;
+	}
+
+	if (COM_Argc() != 3)
+	{
+		CONS_Printf("addserverjoinexec <address> <file>: add file to be executed when joining the server\n");
+		return;
+	}
+
+	strlcpy(serverjoinexec[numserversexec].address, COM_Argv(1), sizeof(serverjoinexec[numserversexec].address));
+	strlcpy(serverjoinexec[numserversexec].filepath, COM_Argv(2), sizeof(serverjoinexec[numserversexec].filepath));
+	CONS_Printf("Added exec file %s for server %s\n", serverjoinexec[numserversexec].filepath, serverjoinexec[numserversexec].address);
+	numserversexec++;
 }

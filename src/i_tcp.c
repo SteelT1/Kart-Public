@@ -249,6 +249,7 @@ static boolean init_tcp_driver = false;
 
 static const char *serverport_name = DEFAULTPORT;
 static const char *clientport_name;/* any port */
+char serverhostname[255];
 
 #ifndef NONET
 
@@ -1484,7 +1485,6 @@ static void SOCK_ClearBans(void)
 
 boolean I_InitTcpNetwork(void)
 {
-	char serverhostname[255];
 	boolean ret = false;
 	// initilize the OS's TCP/IP stack
 	if (!I_InitTcpDriver())

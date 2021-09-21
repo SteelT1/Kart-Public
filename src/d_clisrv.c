@@ -2441,6 +2441,16 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 				break;
 #endif
 		case CL_CONNECTED:
+		{
+			if (serverhostname[0])
+			{
+				for (i = 0; i < numserversexec; i++)
+				{
+					if (strcmp(serverjoinexec[numserversexec].address, serverhostname))
+						COM_ImmedExecute(va("exec \"%s"PATHSEP"%s\" -noerror\n", srb2home, serverjoinexec[numserversexec].filepath));
+				}
+			}
+		}
 		case CL_CONFIRMCONNECT: //logic is handled by M_ConfirmConnect
 		default:
 			break;

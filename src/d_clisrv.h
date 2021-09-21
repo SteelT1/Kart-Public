@@ -500,6 +500,15 @@ extern serverelem_t serverlist[MAXSERVERLIST];
 extern UINT32 serverlistcount;
 extern INT32 mapchangepending;
 
+#define MAX_SERVER_EXEC 255
+typedef struct serverexec_s {
+	char address[47];
+	char filepath[255];
+} serverexec_t;
+
+extern serverexec_t serverjoinexec[MAX_SERVER_EXEC];
+extern UINT8 numserversexec;
+
 // Points inside doomcom
 extern doomdata_t *netbuffer;
 extern consvar_t cv_stunserver;
