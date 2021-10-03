@@ -478,6 +478,7 @@ UINT8 splitscreen = 0;
 boolean circuitmap = true; // SRB2kart
 INT32 adminplayers[MAXPLAYERS];
 serverexec_t serverjoinexec[MAX_SERVER_EXEC];
+char serveraddress[47];
 
 /// \warning Keep this up-to-date if you add/remove/rename net text commands
 const char *netxcmdnames[MAXNETXCMD - 1] =

@@ -2435,22 +2435,22 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 				// Gamestate is now handled within CL_LoadReceivedSavegame()
 				CL_LoadReceivedSavegame();
 				cl_mode = CL_CONNECTED;
+		
+				if (serveraddress[0])
+				{
+					for (i = 0; i < numserversexec; i++)
+					{
+						if (strcmp(serverjoinexec[i].address, serveraddress) == 0)
+							COM_ImmedExecute(va("exec \"%s"PATHSEP"%s -noerror\"\n", srb2home, serverjoinexec[i].filepath));
+					}
+				}
+
 				break;
 			} // don't break case continue to CL_CONNECTED
 			else
 				break;
 #endif
 		case CL_CONNECTED:
-		{
-			if (serverhostname[0])
-			{
-				for (i = 0; i < numserversexec; i++)
-				{
-					if (strcmp(serverjoinexec[numserversexec].address, serverhostname))
-						COM_ImmedExecute(va("exec \"%s"PATHSEP"%s\" -noerror\n", srb2home, serverjoinexec[numserversexec].filepath));
-				}
-			}
-		}
 		case CL_CONFIRMCONNECT: //logic is handled by M_ConfirmConnect
 		default:
 			break;

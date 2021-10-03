@@ -249,7 +249,6 @@ static boolean init_tcp_driver = false;
 
 static const char *serverport_name = DEFAULTPORT;
 static const char *clientport_name;/* any port */
-char serverhostname[255];
 
 #ifndef NONET
 
@@ -1356,6 +1355,7 @@ static SINT8 SOCK_NetMakeNodewPort(const char *address, const char *port)
 		if (sendto(mysockets[0], NULL, 0, 0, runp->ai_addr, runp->ai_addrlen) == 0)
 		{
 			memcpy(&clientaddress[newnode], runp->ai_addr, runp->ai_addrlen);
+			strlcpy(serveraddress, SOCK_GetNodeAddress(newnode), sizeof(serveraddress));
 			break;
 		}
 		runp = runp->ai_next;
@@ -1485,6 +1485,7 @@ static void SOCK_ClearBans(void)
 
 boolean I_InitTcpNetwork(void)
 {
+	char serverhostname[255];
 	boolean ret = false;
 	// initilize the OS's TCP/IP stack
 	if (!I_InitTcpDriver())
