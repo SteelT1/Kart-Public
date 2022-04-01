@@ -11,10 +11,10 @@
 #ifndef _HTTPDL_H_
 #define _HTTPDL_H_
 
+#include <curl/curl.h>
 #include "doomtype.h"
 #include "w_wad.h"
 #include "d_clisrv.h"
-#include <curl/curl.h>
 
 // Information of a download (one for each download)
 typedef struct httpdl_info_s

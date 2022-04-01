@@ -8,7 +8,6 @@
 //-----------------------------------------------------------------------------
 // \brief HTTP based file downloader
 
-#include <curl/curl.h>
 #include <time.h>
 #include "doomdef.h"
 #include "m_argv.h"
@@ -19,20 +18,20 @@
 #include "http_dl.h"
 
 static int running_handles = 0;
-static CURLM *multi_handle; // The multi handle used to keep track of all ongoing transfers
-static CURL *inithandle; // Handle to set common opts with
-static int numfds;
-static int repeats = 0;
+static CURLM *curlm; // The multi handle used to keep track of all ongoing transfers
+static CURL *curl; // Handle to set common opts with
 static boolean httpdl_isinit = false;
 UINT32 httpdl_active_jobs = 0; // Number of currently ongoing jobs
 UINT32 httpdl_total_jobs = 0; // Number of total jobs
 INT32 httpdl_faileddownload = 0; // Number of failed downloads
 HTTP_login *httpdl_logins;
 
-/* Callback function to write received data to file 
- * Required because on win32 not setting can cause crashes if CURLOPT_WRITEFUNCTION isn't set but CURLOPT_WRITEDATA is
+/*
+ * Callback function to write received data to file
+ * Required because on win32 not setting CURLOPT_WRITEFUNCTION can cause crashes if CURLOPT_WRITEDATA is set
  * And there's no way avoiding that
- * See: https://curl.se/libcurl/c/CURLOPT_WRITEDATA.html */
+ * See: https://curl.se/libcurl/c/CURLOPT_WRITEDATA.html
+ */
 static size_t write_data_cb(void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
     size_t written;
@@ -61,29 +60,29 @@ static int progress_cb(void *clientp, double dltotal, double dlnow, double ultot
 
 static void set_common_opts(void)
 {
-	curl_easy_setopt(inithandle, CURLOPT_WRITEFUNCTION, write_data_cb);
-	curl_easy_setopt(inithandle, CURLOPT_NOPROGRESS, 0L);
-	curl_easy_setopt(inithandle, CURLOPT_PROGRESSFUNCTION, progress_cb);
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data_cb);
+	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+	curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, progress_cb);
 	
 	// Only allow HTTP and HTTPS
-	curl_easy_setopt(inithandle, CURLOPT_PROTOCOLS, CURLPROTO_HTTP|CURLPROTO_HTTPS);
-	curl_easy_setopt(inithandle, CURLOPT_USERAGENT, va("%s/%s", SRB2APPLICATION, VERSIONSTRING)); // Set user agent as some servers won't accept invalid user agents.
+	curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTP|CURLPROTO_HTTPS);
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, va("%s/%s", SRB2APPLICATION, VERSIONSTRING)); // Set user agent as some servers won't accept invalid user agents.
 
 	// Follow a redirect request, if sent by the server.
-	curl_easy_setopt(inithandle, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 
-	curl_easy_setopt(inithandle, CURLOPT_FAILONERROR, 1L);
+	curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
 
 	// abort if slower than 1 bytes/sec during 10 seconds
-	curl_easy_setopt(inithandle, CURLOPT_LOW_SPEED_TIME, 10L);
-	curl_easy_setopt(inithandle, CURLOPT_LOW_SPEED_LIMIT, 1L);
+	curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 10L);
+	curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
 }
 
 static void cleanup_download(httpdl_info_t *download)
 {
 	httpdl_active_jobs--;
 	httpdl_total_jobs--;
-	curl_multi_remove_handle(multi_handle, download->handle);
+	curl_multi_remove_handle(curlm, download->handle);
 	curl_easy_cleanup(download->handle);
 	download->handle = NULL;
 }
@@ -93,29 +92,29 @@ boolean HTTPDL_Init(void)
 	// Should only be called once
 	if (httpdl_isinit)
 	{
-		CONS_Alert(CONS_ERROR, "%s: Already initialized\n", __FUNCTION__);
+		CONS_Alert(CONS_ERROR, "HTTPDL: Already initialized\n");
 		return false;
 	}
 	
 	if (curl_global_init(CURL_GLOBAL_ALL))
 	{
-		CONS_Alert(CONS_ERROR, "%s: Could not init cURL\n", __FUNCTION__);
+		CONS_Alert(CONS_ERROR, "HTTPDL: Could not init cURL\n");
 		return false;
 	}
 		
-	multi_handle = curl_multi_init();
+	curlm = curl_multi_init();
 	
-	if (!multi_handle)
+	if (!curlm)
 	{
-		CONS_Alert(CONS_ERROR, "%s: Could not create a multi handle", __FUNCTION__);
+		CONS_Alert(CONS_ERROR, "HTTPDL: Could not create a multi handle");
 		return false;
 	}
 	
-	inithandle = curl_easy_init();
+	curl = curl_easy_init();
 	
-	if (!inithandle)
+	if (!curl)
 	{
-		CONS_Alert(CONS_ERROR, "%s: Could not create easy handle", __FUNCTION__);
+		CONS_Alert(CONS_ERROR, "HTTPDL: Could not create easy handle");
 		return false;
 	}
 	
@@ -136,8 +135,8 @@ void HTTPDL_Cleanup(httpdl_info_t *download)
 				cleanup_download(download);
     	}
 
-		curl_multi_cleanup(multi_handle);
-		curl_easy_cleanup(inithandle);
+		curl_multi_cleanup(curlm);
+		curl_easy_cleanup(curl);
 		curl_global_cleanup();
     }
     
@@ -157,7 +156,7 @@ boolean HTTPDL_AddDownload(httpdl_info_t *download, const char* url)
 		I_Error("Attempted to download files in -nodownload mode");
 #endif
 
-	download->handle = curl_easy_duphandle(inithandle);
+	download->handle = curl_easy_duphandle(curl);
 
 	if (download->handle)
 	{
@@ -196,7 +195,7 @@ boolean HTTPDL_AddDownload(httpdl_info_t *download, const char* url)
 		curl_easy_setopt(download->handle, CURLOPT_PROGRESSDATA, download);
 		
 		CONS_Printf(M_GetText("URL: %s; added to download queue\n"), download->url);
-		curl_multi_add_handle(multi_handle, download->handle);
+		curl_multi_add_handle(curlm, download->handle);
 		lastfilenum = download->filenum;
 		download->starttime = I_GetTime()/TICRATE;
 		download->fileinfo->status = FS_DOWNLOADING;
@@ -209,17 +208,16 @@ void HTTPDL_DownloadFiles(void)
 {
 	CURLMcode mc;
 	
-    if (multi_handle)
+    if (curlm)
     {
-		mc = curl_multi_perform(multi_handle, &running_handles);
-		
-#if 0		
+		mc = curl_multi_perform(curlm, &running_handles);
+
     	if (running_handles)
       	{	
 			if (mc == CURLM_OK) 
 			{
 				// wait for activity, timeout or "nothing" 
-				curl_multi_wait(multi_handle, NULL, 0, 1000, &numfds);
+				curl_multi_wait(curlm, NULL, 0, 1000, &numfds);
 			}
 			
 			if (mc != CURLM_OK)
@@ -251,7 +249,7 @@ void HTTPDL_CheckDownloads(httpdl_info_t *download)
 	// Check if any transfers are done, and if so, report the status
 	do 
 	{
-		m = curl_multi_info_read(multi_handle, &msg_left);
+		m = curl_multi_info_read(curlm, &msg_left);
 		if (m && (m->msg == CURLMSG_DONE))
 		{
 			easyres = m->data.result;
