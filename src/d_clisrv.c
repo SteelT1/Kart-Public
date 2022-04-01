@@ -2370,7 +2370,6 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 
 		case CL_DOWNLOADHTTPFILES:
 			waitmore = false;
-			HTTPDL_DownloadFiles();
 
 			for (i = 0; i < fileneedednum; i++) 
 			{
@@ -2386,10 +2385,12 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 					waitmore = true;
 					break;
 				}
-				
-				if (httpdl_downloads[i].handle && httpdl_downloads[i].fileinfo->status == FS_DOWNLOADING)
-					HTTPDL_CheckDownloads(&httpdl_downloads[i]);				
 			}
+
+			if (!HTTPDL_DownloadFiles())
+				httpdl_faileddownload++;
+
+			HTTPDL_CheckDownloads();
 
 			if (waitmore)
 				break; // exit the case
@@ -2399,6 +2400,7 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 				CONS_Alert(CONS_NOTICE, "%d %s failed to download, attempting to download using internal downloader.\n", 
 					httpdl_faileddownload, 
 					(httpdl_faileddownload != 1) ? "files" : "file");
+				HTTPDL_Cleanup(httpdl_downloads);
 				cl_mode = CL_CHECKFILES;
 				break;
 			}

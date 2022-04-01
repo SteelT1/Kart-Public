@@ -48,8 +48,8 @@ extern char http_source[HTTP_MAX_URL_LENGTH];
 boolean HTTPDL_Init(void);
 void HTTPDL_Cleanup(httpdl_info_t *download);
 boolean HTTPDL_AddDownload(httpdl_info_t *curl, const char* url);
-void HTTPDL_DownloadFiles(void);
-extern void HTTPDL_CheckDownloads(httpdl_info_t *download);
+boolean HTTPDL_DownloadFiles(void);
+extern void HTTPDL_CheckDownloads(void);
 HTTP_login * HTTPDL_GetLogin (const char *url, HTTP_login ***return_prev_next);
 
 #endif // _HTTPDL_H_

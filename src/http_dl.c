@@ -191,8 +191,10 @@ boolean HTTPDL_AddDownload(httpdl_info_t *download, const char* url)
 		
 		// provide a buffer to store errors in
 		curl_easy_setopt(download->handle, CURLOPT_ERRORBUFFER, download->error_buffer);		
-		
 		curl_easy_setopt(download->handle, CURLOPT_PROGRESSDATA, download);
+
+		// Store a pointer to download info
+		curl_easy_setopt(download->handle, CURLOPT_PRIVATE, download);
 		
 		CONS_Printf(M_GetText("URL: %s; added to download queue\n"), download->url);
 		curl_multi_add_handle(curlm, download->handle);
@@ -204,7 +206,7 @@ boolean HTTPDL_AddDownload(httpdl_info_t *download, const char* url)
 	return false;
 }
 
-void HTTPDL_DownloadFiles(void)
+boolean HTTPDL_DownloadFiles(void)
 {
 	CURLMcode mc;
 	
@@ -217,34 +219,24 @@ void HTTPDL_DownloadFiles(void)
 			if (mc == CURLM_OK) 
 			{
 				// wait for activity, timeout or "nothing" 
-				curl_multi_wait(curlm, NULL, 0, 1000, &numfds);
+				mc = curl_multi_wait(curlm, NULL, 0, 1000, NULL);
 			}
 			
 			if (mc != CURLM_OK)
-			{
-				CONS_Debug(DBG_NETPLAY, "curl_multi failed, code %d.\n", mc);
-				return;
-			}
-			
-			if (!numfds) 
-			{
-				repeats++; // count number of repeated zero numfds 
-				
-				if (repeats > 1) 
-					I_Sleep();
-			}
+				CONS_Debug(DBG_NETPLAY, "curl returned error %d from transfer\n", mc);
 			else
-				repeats = 0;
-      	}
-#endif     	
+				return true;
+		}
     }
+    return false;
 }
 
-void HTTPDL_CheckDownloads(httpdl_info_t *download)
+void HTTPDL_CheckDownloads(void)
 {
 	CURLMsg *m; // for picking up messages with the transfer status
-	CURLcode easyres; // Result from easy handle for transfer
+	CURLcode easyres; // Result from easy handle for a transfer
 	int msg_left;
+	httpdl_info_t *download;
 
 	// Check if any transfers are done, and if so, report the status
 	do 
@@ -253,6 +245,9 @@ void HTTPDL_CheckDownloads(httpdl_info_t *download)
 		if (m && (m->msg == CURLMSG_DONE))
 		{
 			easyres = m->data.result;
+
+			// Get download info for this transfer
+			curl_easy_getinfo(m->easy_handle, CURLINFO_PRIVATE, &download);
 			if (easyres != CURLE_OK)
 			{
 				if (download->error_buffer[0] == '\0')
