@@ -50,7 +50,6 @@ static int progress_cb(void *clientp, double dltotal, double dlnow, double ultot
 	(void)ulnow; 
 	di = *(httpdl_info_t *)clientp;
 	di.fileinfo->currentsize = (UINT32)dlnow;
-	di.fileinfo->totalsize = (UINT32)dltotal;
 	di.curtime = I_GetTime()/TICRATE;
 	dlspeed = dlnow / (di.curtime - di.starttime);
 	if (dlspeed > 0)
