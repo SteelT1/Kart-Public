@@ -2067,7 +2067,7 @@ static void M_ConfirmConnect(event_t *ev)
 			if (totalfilesrequestednum > 0)
 			{
 #ifdef HAVE_CURL
-				if (http_source[0] == '\0' || httpdl_faileddownload)
+				if (http_source[0] == '\0' || httpdl_faileddownloads)
 #endif
 				{
 					if (CL_SendRequestFile())
@@ -2155,7 +2155,7 @@ static boolean CL_FinishedFileList(void)
 		// must download something
 		// can we, though?
 #ifdef HAVE_CURL
-		if (http_source[0] == '\0' || httpdl_faileddownload)
+		if (http_source[0] == '\0' || httpdl_faileddownloads)
 #endif
 		{
 			if (!CL_CheckDownloadable()) // nope!
@@ -2177,7 +2177,7 @@ static boolean CL_FinishedFileList(void)
 		}
 
 #ifdef HAVE_CURL
-		if (!httpdl_faileddownload)
+		if (!httpdl_faileddownloads)
 #endif
 		{
 #ifndef NONET
@@ -2396,7 +2396,7 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 						if (HTTPDL_AddDownload(&httpdl_downloads[i], http_source)) 
 							httpdl_active_jobs++;
 						else
-							httpdl_faileddownload++;
+							httpdl_faileddownloads++;
 					}
 					waitmore = true;
 					break;
@@ -2404,18 +2404,18 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 			}
 
 			if (!HTTPDL_DownloadFiles())
-				httpdl_faileddownload++;
+				httpdl_faileddownloads++;
 
 			HTTPDL_CheckDownloads();
 
 			if (waitmore)
 				break; // exit the case
 
-			if (httpdl_faileddownload && !httpdl_total_jobs)
+			if (httpdl_faileddownloads && !httpdl_total_jobs)
 			{
 				CONS_Alert(CONS_NOTICE, "%d %s failed to download, attempting to download using internal downloader.\n", 
-					httpdl_faileddownload, 
-					(httpdl_faileddownload != 1) ? "files" : "file");
+					httpdl_faileddownloads,
+					(httpdl_faileddownloads != 1) ? "files" : "file");
 				HTTPDL_Cleanup(httpdl_downloads);
 				cl_mode = CL_CHECKFILES;
 				break;

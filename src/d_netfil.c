@@ -482,6 +482,9 @@ boolean CL_LoadServerFiles(void)
 			case FS_DOWNLOADING:
 				s = "FS_DOWNLOADING";
 				break;
+			case FS_FALLBACK:
+				s = "FS_FALLBACK";
+				break;
 			default:
 				s = "unknown";
 				break;

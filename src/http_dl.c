@@ -18,12 +18,12 @@
 #include "http_dl.h"
 
 static int running_handles = 0;
-static CURLM *curlm; // The multi handle used to keep track of all ongoing transfers
-static CURL *curl; // Handle to set common opts with
+static CURLM *curlm = NULL; // The multi handle used to keep track of all ongoing transfers
+static CURL *curl = NULL; // Handle to set common opts with
 static boolean httpdl_isinit = false;
 UINT32 httpdl_active_jobs = 0; // Number of currently ongoing jobs
 UINT32 httpdl_total_jobs = 0; // Number of total jobs
-INT32 httpdl_faileddownload = 0; // Number of failed downloads
+UINT32 httpdl_faileddownloads = 0; // Number of failed downloads
 HTTP_login *httpdl_logins;
 
 /*
@@ -141,9 +141,6 @@ void HTTPDL_Cleanup(httpdl_info_t *download)
     }
     
     memset(download, 0, sizeof(*download));
-    httpdl_active_jobs = 0;
-	httpdl_total_jobs = 0;
-	httpdl_faileddownload = 0;
 	httpdl_isinit = false;
 }
 
@@ -196,7 +193,7 @@ boolean HTTPDL_AddDownload(httpdl_info_t *download, const char* url)
 		// Store a pointer to download info
 		curl_easy_setopt(download->handle, CURLOPT_PRIVATE, download);
 		
-		CONS_Printf(M_GetText("URL: %s; added to download queue\n"), download->url);
+		CONS_Printf(M_GetText("HTTPDL: Downloading %s\n"), download->url);
 		curl_multi_add_handle(curlm, download->handle);
 		lastfilenum = download->filenum;
 		download->starttime = I_GetTime()/TICRATE;
@@ -209,26 +206,26 @@ boolean HTTPDL_AddDownload(httpdl_info_t *download, const char* url)
 boolean HTTPDL_DownloadFiles(void)
 {
 	CURLMcode mc;
-	
-    if (curlm)
-    {
-		mc = curl_multi_perform(curlm, &running_handles);
+	if (!curlm)
+		return false;
 
-    	if (running_handles)
-      	{	
-			if (mc == CURLM_OK) 
-			{
-				// wait for activity, timeout or "nothing" 
-				mc = curl_multi_wait(curlm, NULL, 0, 1000, NULL);
-			}
+	mc = curl_multi_perform(curlm, &running_handles);
+
+    if (running_handles)
+    {
+		if (mc == CURLM_OK)
+		{
+			// wait for activity, timeout or "nothing"
+			mc = curl_multi_wait(curlm, NULL, 0, 1000, NULL);
+		}
 			
-			if (mc != CURLM_OK)
-				CONS_Debug(DBG_NETPLAY, "curl returned error %d from transfer\n", mc);
-			else
-				return true;
+		if (mc != CURLM_OK)
+		{
+			CONS_Alert(CONS_ERROR, "HTTPDL: curl_multi_perform error %d\n", mc);
+			return false;
 		}
     }
-    return false;
+    return true;
 }
 
 void HTTPDL_CheckDownloads(void)
@@ -257,12 +254,12 @@ void HTTPDL_CheckDownloads(void)
 				fclose(download->fileinfo->file);
 				remove(download->fileinfo->filename);
 				download->fileinfo->file = NULL;
-				CONS_Alert(CONS_ERROR, M_GetText("Failed to download %s (%s)\n"), download->basename, download->error_buffer);
-				httpdl_faileddownload++;
+				CONS_Alert(CONS_ERROR, M_GetText("HTTPDL: Failed to download %s (%s)\n"), download->url, download->error_buffer);
+				httpdl_faileddownloads++;
 			}
 			else
 			{
-				CONS_Printf(M_GetText("Finished downloading %s\n"), download->basename);
+				CONS_Printf(M_GetText("HTTPDL: Finished downloading %s\n"), download->url);
 				downloadcompletednum++;
 				downloadcompletedsize += download->fileinfo->totalsize;
 				download->fileinfo->status = FS_FOUND;

@@ -41,7 +41,7 @@ extern struct HTTP_login
 
 extern UINT32 httpdl_active_jobs; // Number of currently ongoing download
 extern UINT32 httpdl_total_jobs; // Number of total download
-extern INT32 httpdl_faileddownload; // Number of failed downloads
+extern UINT32 httpdl_faileddownloads; // Number of failed downloads
 extern httpdl_info_t httpdl_downloads[MAX_WADFILES];
 extern char http_source[HTTP_MAX_URL_LENGTH];
 
