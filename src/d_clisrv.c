@@ -157,7 +157,7 @@ tic_t firstconnectattempttime = 0;
 
 #ifdef HAVE_CURL
 httpdl_info_t httpdl_downloads[MAX_WADFILES];
-char http_source[HTTP_MAX_URL_LENGTH];
+char http_source[HTTPDL_MAX_URL_LENGTH];
 #endif
 
 // Must be a power of two
@@ -1526,7 +1526,7 @@ static void SV_SendServerInfo(INT32 node, tic_t servertime)
 		netbuffer->u.serverinfo.iszone = 0;
 
 	memset(netbuffer->u.serverinfo.maptitle, 0, 33);
-	memset(netbuffer->u.serverinfo.httpsource, 0, HTTP_MAX_URL_LENGTH);
+	memset(netbuffer->u.serverinfo.httpsource, 0, HTTPDL_MAX_URL_LENGTH);
 
 	if (!(mapheaderinfo[gamemap-1]->menuflags & LF2_HIDEINMENU) && mapheaderinfo[gamemap-1]->lvlttl[0])
 	{
@@ -1579,14 +1579,14 @@ static void SV_SendServerInfo(INT32 node, tic_t servertime)
 	netbuffer->u.serverinfo.actnum = 0; //mapheaderinfo[gamemap-1]->actnum
 
 	http_url_length = strlen(httpurl);
-	if (http_url_length > HTTP_MAX_URL_LENGTH)
-		http_url_length = HTTP_MAX_URL_LENGTH;
+	if (http_url_length > HTTPDL_MAX_URL_LENGTH)
+		http_url_length = HTTPDL_MAX_URL_LENGTH;
 
 	if (snprintf(netbuffer->u.serverinfo.httpsource, http_url_length+1, "%s", httpurl) < 0)
 		// If there's an encoding error, send nothing, we accept that the above may be truncated
 		strncpy(netbuffer->u.serverinfo.httpsource, "", http_url_length);
 
-	netbuffer->u.serverinfo.httpsource[HTTP_MAX_URL_LENGTH-1] = '\0';
+	netbuffer->u.serverinfo.httpsource[HTTPDL_MAX_URL_LENGTH-1] = '\0';
 
 	p = PutFileNeeded(0);
 
@@ -2275,7 +2275,7 @@ static boolean CL_ServerConnectionSearchTicker(tic_t *asksent)
 		{
 #ifdef HAVE_CURL
 			if (serverlist[i].info.httpsource[0])
-				strncpy(http_source, serverlist[i].info.httpsource, HTTP_MAX_URL_LENGTH);
+				strncpy(http_source, serverlist[i].info.httpsource, HTTPDL_MAX_URL_LENGTH);
 			else
 				http_source[0] = '\0';
 #else

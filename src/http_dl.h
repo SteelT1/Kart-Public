@@ -20,7 +20,7 @@
 typedef struct httpdl_info_s
 {
 	INT32 filenum; 
-	char url[HTTP_MAX_URL_LENGTH]; // The url for this download
+	char url[HTTPDL_MAX_URL_LENGTH]; // The url for this download
 	tic_t starttime;
 	tic_t curtime;
 	CURL *handle; // The easy handle for this download 
@@ -43,7 +43,7 @@ extern UINT32 httpdl_active_jobs; // Number of currently ongoing download
 extern UINT32 httpdl_total_jobs; // Number of total download
 extern UINT32 httpdl_faileddownloads; // Number of failed downloads
 extern httpdl_info_t httpdl_downloads[MAX_WADFILES];
-extern char http_source[HTTP_MAX_URL_LENGTH];
+extern char http_source[HTTPDL_MAX_URL_LENGTH];
 
 boolean HTTPDL_Init(void);
 void HTTPDL_Cleanup(httpdl_info_t *download);
