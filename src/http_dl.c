@@ -249,22 +249,33 @@ void HTTPDL_CheckDownloads(void)
 				if (download->error_buffer[0] == '\0')
 					strlcpy(download->error_buffer, curl_easy_strerror(easyres), CURL_ERROR_SIZE);
 				
-				download->fileinfo->status = FS_FALLBACK;
 				fclose(download->fileinfo->file);
 				remove(download->fileinfo->filename);
-				download->fileinfo->file = NULL;
-				CONS_Alert(CONS_ERROR, M_GetText("HTTPDL: Failed to download %s (%s)\n"), download->url, download->error_buffer);
+				download->fileinfo->status = FS_FALLBACK;
 				httpdl_faileddownloads++;
+				CONS_Alert(CONS_ERROR, M_GetText("HTTPDL: Failed to download %s (%s)\n"), download->url, download->error_buffer);
 			}
 			else
 			{
 				CONS_Printf(M_GetText("HTTPDL: Finished downloading %s\n"), download->url);
 				downloadcompletednum++;
 				downloadcompletedsize += download->fileinfo->totalsize;
-				download->fileinfo->status = FS_FOUND;
 				fclose(download->fileinfo->file);
+
+				// Check to make sure we got the correct file
+				CONS_Debug(DBG_SETUP, "Opening %s for md5 check...", download->fileinfo->filename);
+				download->fileinfo->status = checkfilemd5(download->fileinfo->filename, download->fileinfo->md5sum);
+				if (download->fileinfo->status == FS_FOUND)
+				{
+					CONS_Debug(DBG_SETUP, "good!\n");
+				}
+				else
+				{
+					CONS_Debug(DBG_SETUP, "bad!\n");
+				}
 			}
 
+			download->fileinfo->file = NULL;
 			cleanup_download(download);
 			if (!httpdl_total_jobs)
 				break;
